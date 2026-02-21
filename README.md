@@ -1,7 +1,7 @@
 # granola-sync
 
 [![CI](https://github.com/armsteadj1/granola-sync/actions/workflows/ci.yml/badge.svg)](https://github.com/armsteadj1/granola-sync/actions/workflows/ci.yml)
-[![npm version](https://img.shields.io/npm/v/granola-sync.svg)](https://www.npmjs.com/package/granola-sync)
+[![npm version](https://img.shields.io/npm/v/@armsteadj1/granola-sync.svg)](https://www.npmjs.com/package/@armsteadj1/granola-sync)
 
 Automatically syncs [Granola](https://granola.ai) meeting transcripts to Google Drive. Runs as a macOS LaunchAgent every 30 minutes — no Google Drive API setup required.
 
@@ -41,13 +41,13 @@ Each meeting becomes a Markdown file like `2024-11-15 - Weekly Standup.md` conta
 ### Option 1: npx (no install required)
 
 ```bash
-npx granola-sync sync
+npx @armsteadj1/granola-sync sync
 ```
 
 ### Option 2: Global npm install
 
 ```bash
-npm install -g granola-sync
+npm install -g @armsteadj1/granola-sync
 granola-sync sync
 ```
 
@@ -259,7 +259,7 @@ Here's how to set it up so I can access your meeting transcripts:
 **On your machine:**
 
 1. Install the sync tool:
-   npm install -g granola-sync
+   npm install -g @armsteadj1/granola-sync
 
 2. Configure it to sync to a folder I can access:
    granola-sync config --output-dir ~/Dropbox/Granola Transcripts
@@ -286,7 +286,7 @@ Only use this flow if you detect Granola is actually installed on the same machi
 
 ```bash
 # Step 1: Install the tool
-npm install -g granola-sync
+npm install -g @armsteadj1/granola-sync
 
 # Step 2: Verify
 granola-sync doctor --json
