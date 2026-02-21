@@ -19,6 +19,7 @@ from typing import Optional
 
 import click
 import requests
+import yaml
 
 # Paths
 HOME = Path.home()
@@ -26,7 +27,8 @@ GRANOLA_AUTH_PATH = HOME / "Library/Application Support/Granola/supabase.json"
 GRANOLA_CACHE_PATH = HOME / "Library/Application Support/Granola/cache-v3.json"
 CONFIG_DIR = HOME / ".config/granola-sync"
 SYNC_STATE_PATH = CONFIG_DIR / "sync_state.json"
-CONFIG_PATH = CONFIG_DIR / "config.json"
+CONFIG_PATH = CONFIG_DIR / "config.yaml"
+CONFIG_PATH_LEGACY = CONFIG_DIR / "config.json"
 LOG_PATH = HOME / "Library/Logs/granola-sync.log"
 
 # Google Drive desktop app folder
@@ -57,18 +59,40 @@ def ensure_config_dir():
 
 
 def load_config() -> dict:
-    """Load configuration from config file."""
+    """Load configuration from YAML config file, migrating from JSON if needed."""
+    # Migrate from legacy JSON config if YAML doesn't exist yet
+    if not CONFIG_PATH.exists() and CONFIG_PATH_LEGACY.exists():
+        with open(CONFIG_PATH_LEGACY) as f:
+            config = json.load(f)
+        save_config(config)
+        return config
+
     if CONFIG_PATH.exists():
         with open(CONFIG_PATH) as f:
-            return json.load(f)
+            return yaml.safe_load(f) or {}
     return {}
 
 
 def save_config(config: dict):
-    """Save configuration to config file."""
+    """Save configuration to YAML config file."""
     ensure_config_dir()
     with open(CONFIG_PATH, "w") as f:
-        json.dump(config, f, indent=2)
+        yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
+
+
+def validate_writable(path: Path) -> tuple:
+    """Check if a path is writable. Returns (is_writable, error_message)."""
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except PermissionError as e:
+        return False, f"Cannot create directory: {e}"
+    except OSError as e:
+        return False, f"Cannot create directory: {e}"
+
+    if not os.access(path, os.W_OK):
+        return False, f"Directory is not writable: {path}"
+
+    return True, ""
 
 
 def find_google_drive_folder() -> Optional[Path]:
@@ -90,7 +114,9 @@ def get_output_folder(output_dir: Optional[Path] = None) -> Path:
     """Get or create the output folder for synced files."""
     # Use explicitly provided path first
     if output_dir:
-        output_dir.mkdir(parents=True, exist_ok=True)
+        is_writable, error = validate_writable(output_dir)
+        if not is_writable:
+            raise PermissionError(error)
         return output_dir
 
     # Then check config
@@ -98,7 +124,9 @@ def get_output_folder(output_dir: Optional[Path] = None) -> Path:
     configured_dir = config.get("output_dir")
     if configured_dir:
         path = Path(configured_dir).expanduser()
-        path.mkdir(parents=True, exist_ok=True)
+        is_writable, error = validate_writable(path)
+        if not is_writable:
+            raise PermissionError(error)
         return path
 
     # Fall back to Google Drive
@@ -379,7 +407,7 @@ def sync_meetings(output_dir: Optional[Path] = None):
     try:
         output_folder = get_output_folder(output_dir)
         logger.info(f"Output folder: {output_folder}")
-    except FileNotFoundError as e:
+    except (FileNotFoundError, PermissionError) as e:
         logger.error(str(e))
         return
 
@@ -492,11 +520,29 @@ def cli():
 
 
 @cli.command()
-def setup():
+@click.option(
+    "--output-dir",
+    type=click.Path(),
+    default=None,
+    help="Set the output directory for synced files.",
+)
+def setup(output_dir):
     """Check configuration and show setup status."""
     ensure_config_dir()
 
     click.echo("\n=== Granola to Google Drive Sync ===\n")
+
+    # Configure output directory if provided
+    if output_dir:
+        path = Path(output_dir).expanduser()
+        is_writable, error = validate_writable(path)
+        if not is_writable:
+            click.echo(f"ERROR: {error}")
+            sys.exit(1)
+        config = load_config()
+        config["output_dir"] = str(path)
+        save_config(config)
+        click.echo(f"Output directory configured: {path}")
 
     # Check Granola
     if not GRANOLA_AUTH_PATH.exists():
@@ -520,17 +566,28 @@ def setup():
     if not drive_folder:
         click.echo("Google Drive: NOT FOUND")
         click.echo("  Install Google Drive desktop app and sign in")
-        sys.exit(1)
-    click.echo(f"Google Drive: {drive_folder}")
+
+    if drive_folder:
+        click.echo(f"Google Drive: {drive_folder}")
 
     # Determine output folder
     config = load_config()
     if config.get("output_dir"):
         output_folder = Path(config["output_dir"]).expanduser()
-    else:
+        is_writable, error = validate_writable(output_folder)
+        if not is_writable:
+            click.echo(f"Output folder: ERROR — {error}")
+            sys.exit(1)
+        click.echo(f"Output folder: {output_folder} (from config)")
+        click.echo(f"Config file:   {CONFIG_PATH}")
+    elif drive_folder:
         output_folder = drive_folder / DRIVE_FOLDER_NAME
-    output_folder.mkdir(parents=True, exist_ok=True)
-    click.echo(f"Output folder: {output_folder}")
+        output_folder.mkdir(parents=True, exist_ok=True)
+        click.echo(f"Output folder: {output_folder} (Google Drive default)")
+    else:
+        click.echo("Output folder: NOT CONFIGURED")
+        click.echo(f"  Set one with: granola_sync.py setup --output-dir <path>")
+        sys.exit(1)
 
     # Check sync state
     state = load_sync_state()
@@ -606,13 +663,19 @@ def config_cmd(output_dir, show):
     config = load_config()
 
     if output_dir:
-        config["output_dir"] = str(Path(output_dir).expanduser())
+        path = Path(output_dir).expanduser()
+        is_writable, error = validate_writable(path)
+        if not is_writable:
+            click.echo(f"ERROR: {error}", err=True)
+            sys.exit(1)
+        config["output_dir"] = str(path)
         save_config(config)
         click.echo(f"Output directory set to: {config['output_dir']}")
 
     if show or not output_dir:
         if config:
-            click.echo(json.dumps(config, indent=2))
+            click.echo(f"Config file: {CONFIG_PATH}")
+            click.echo(yaml.dump(config, default_flow_style=False, allow_unicode=True), nl=False)
         else:
             click.echo("No configuration set. Using defaults.")
             click.echo(f"Config file: {CONFIG_PATH}")
