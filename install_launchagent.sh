@@ -8,11 +8,37 @@ LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
 echo "=== Installing Granola Sync LaunchAgent ==="
 echo ""
 
+# Find the granola-sync binary
+BINARY=""
+
+# Check if globally installed via npm
+if command -v granola-sync &>/dev/null; then
+    BINARY="$(command -v granola-sync)"
+elif [ -f "$SCRIPT_DIR/dist/index.js" ] && command -v node &>/dev/null; then
+    # Use node to run the local build
+    BINARY="$(command -v node)"
+    BINARY_ARG="$SCRIPT_DIR/dist/index.js"
+else
+    echo "ERROR: granola-sync binary not found."
+    echo "Install it first with: npm install -g granola-drive-sync"
+    echo "Or build from source: npm install && npm run build"
+    exit 1
+fi
+
 # Create LaunchAgents directory if needed
 mkdir -p "$LAUNCH_AGENTS_DIR"
 
-# Create the plist with correct paths
 PLIST_PATH="$LAUNCH_AGENTS_DIR/$PLIST_NAME"
+
+# Build ProgramArguments based on whether we have a direct binary or node + script
+if [ -n "$BINARY_ARG" ]; then
+    PROGRAM_ARGS="        <string>$BINARY</string>
+        <string>$BINARY_ARG</string>
+        <string>sync</string>"
+else
+    PROGRAM_ARGS="        <string>$BINARY</string>
+        <string>sync</string>"
+fi
 
 cat > "$PLIST_PATH" << EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -24,9 +50,7 @@ cat > "$PLIST_PATH" << EOF
 
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/bin/env</string>
-        <string>python3</string>
-        <string>$SCRIPT_DIR/granola_sync.py</string>
+$PROGRAM_ARGS
     </array>
 
     <key>StartInterval</key>
