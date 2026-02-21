@@ -215,11 +215,20 @@ cat ~/Library/Logs/granola-sync.log
 
 ## For AI Agents
 
-This section is for autonomous agents attempting to self-serve setup, detect environment state, and run or extend this tool without human guidance.
+This section is for autonomous agents attempting to help their human set up Granola transcript syncing.
 
-### Detection Logic
+### Important: Agent vs. User Machine Separation
 
-Run these checks in order. Each check is independent; a failure tells you exactly what's missing.
+**Granola runs on your human's machine (their laptop), NOT on the agent's machine (your server/Mac mini).**
+
+When you detect that Granola is not installed on your machine:
+1. **Don't try to install Granola on the agent machine**
+2. **Assume it's on your human's machine**
+3. **Provide them with setup instructions** (see below)
+
+### Detection Logic (on Agent Machine)
+
+Run these checks to determine what's available on YOUR machine:
 
 ```bash
 # 1. Node.js 18+ available?
@@ -228,65 +237,75 @@ node --version 2>&1 | grep -E "v(1[89]|[2-9][0-9])\."
 
 # 2. Granola auth file present?
 test -f "$HOME/Library/Application Support/Granola/supabase.json" && echo "OK" || echo "MISSING"
-# MISSING = Granola not installed or not signed in (requires human action)
+# MISSING = Granola is not on this machine (expected for agents)
 
-# 3. Granola cache present?
-test -f "$HOME/Library/Application Support/Granola/cache-v3.json" && echo "OK" || echo "MISSING"
-# MISSING = Granola hasn't populated cache yet; open Granola and wait
-
-# 4. Google Drive mounted?
-ls "$HOME/Library/CloudStorage/" | grep "^GoogleDrive-" 2>/dev/null
-# No output = Google Drive desktop app not installed or not signed in (requires human action)
-
-# 5. Sync state (optional — absence just means first run)
-test -f "$HOME/.config/granola-sync/sync_state.json" && echo "EXISTS" || echo "FIRST_RUN"
-
-# 6. LaunchAgent installed?
-test -f "$HOME/Library/LaunchAgents/com.user.granola-sync.plist" && echo "INSTALLED" || echo "NOT_INSTALLED"
+# 3. Shared folder accessible?
+# Check if your human has set up a shared sync folder you can access
+test -d "$HOME/Shared/Granola Transcripts" && echo "OK" || echo "NOT_SETUP"
 ```
 
-**Programmatic check via the built-in doctor command:**
+### When Granola is NOT on Agent Machine (Expected Case)
 
-```bash
-granola-sync doctor --json
-# Returns JSON with status: "ok" or "error" and per-check details
+If Granola is not installed on your machine, provide your human with these **setup instructions for THEIR machine**:
+
+```
+I found the granola-drive-sync tool, but Granola is installed on YOUR machine, not mine.
+
+Here's how to set it up so I can access your meeting transcripts:
+
+**On your machine:**
+
+1. Install the sync tool:
+   npm install -g granola-drive-sync
+
+2. Configure it to sync to a folder I can access:
+   granola-sync config --output-dir ~/Dropbox/Granola Transcripts
+   
+   (Or use Google Drive, iCloud, or any shared folder)
+
+3. Run the initial sync:
+   granola-sync sync
+
+4. Set up automatic syncing (runs every 30 min):
+   curl -fsSL https://raw.githubusercontent.com/thegreysky/granola-drive-sync/main/install_launchagent.sh | bash
+
+5. Share the output folder with me:
+   - If using Dropbox: Share "Granola Transcripts" folder
+   - If using Google Drive: Make sure Drive File Stream is set up on both machines
+   - If local network: Set up folder sharing via SMB/AFP
+
+Once you've done this, I'll be able to read your meeting transcripts automatically.
 ```
 
-### Auto-Setup Flow
+### Auto-Setup Flow (When Granola IS on Agent Machine)
 
-For an agent running in a provisioned macOS environment where Granola and Google Drive are already signed in:
+Only use this flow if you detect Granola is actually installed on the same machine as the agent:
 
 ```bash
 # Step 1: Install the tool
 npm install -g granola-drive-sync
 
-# Step 2: Verify (check JSON output for status: "ok")
+# Step 2: Verify
 granola-sync doctor --json
 
-# Step 3: Run one-time sync to validate end-to-end
+# Step 3: Run sync
 granola-sync sync
 
-# Step 4: (optional) Install LaunchAgent for persistent scheduling
-chmod +x install_launchagent.sh
-./install_launchagent.sh
-
-# Step 5: Confirm output files appeared
-ls "$HOME/Library/CloudStorage/GoogleDrive-"*/My\ Drive/Granola\ Transcripts/ 2>/dev/null | head -5
+# Step 4: Install LaunchAgent
+curl -fsSL https://raw.githubusercontent.com/thegreysky/granola-drive-sync/main/install_launchagent.sh | bash
 ```
 
-### Missing Pieces Guide
+### Setup Options for Users
 
-| What's missing | Automatable? | Fix |
+When guiding your human, suggest these output directory options:
+
+| Option | Command | Best For |
 |---|---|---|
-| Node.js 18+ | Yes (with brew/nvm) | `brew install node` |
-| Granola app + login | **No** — requires GUI auth | Direct human to granola.ai |
-| Google Drive desktop app + login | **No** — requires GUI auth | Direct human to google.com/drive/download |
-| Granola cache populated | Partial | Open Granola, wait ~30 sec, retry |
-| LaunchAgent plist | Yes | `./install_launchagent.sh` |
-| Output folder | Auto-created | Created on first sync |
-| Sync state file | Auto-created | Created on first sync |
-
-**Key constraint:** The two hard blockers (Granola sign-in and Google Drive sign-in) require a human to complete OAuth flows in a GUI application. An agent cannot automate these. If either is missing, surface a clear message to the human operator and halt.
+| **Dropbox** | `granola-sync config --output-dir ~/Dropbox/Granola` | Easy sharing between machines |
+| **Google Drive** | `granola-sync config --output-dir ~/Google\ Drive/My\ Drive/Granola` | Already using Google Drive File Stream |
+| **iCloud Drive** | `granola-sync config --output-dir ~/Library/Mobile\ Documents/com~apple~CloudDocs/Granola` | macOS-only environments |
+| **Network Share** | `granola-sync config --output-dir /Volumes/shared/Granola` | Local network access |
+| **Custom Path** | `granola-sync config --output-dir ~/any/path` | Advanced setups |
 
 ### Alternatives
 
