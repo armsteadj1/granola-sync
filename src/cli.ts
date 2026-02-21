@@ -2,9 +2,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
 import chalk from 'chalk';
+import prompts from 'prompts';
 import { Command } from 'commander';
 import { Config } from './types';
 import {
+  HOME,
   GRANOLA_AUTH_PATH,
   GRANOLA_CACHE_PATH,
   CONFIG_PATH,
@@ -25,18 +27,172 @@ import {
 
 // ─── setup ───────────────────────────────────────────────────────────────────
 
+function detectSyncLocations(): Array<{ name: string; basePath: string }> {
+  const locations: Array<{ name: string; basePath: string }> = [];
+
+  // Google Drive
+  const driveFolder = findGoogleDriveFolder();
+  if (driveFolder) {
+    locations.push({ name: 'Google Drive (My Drive)', basePath: driveFolder });
+  }
+
+  // iCloud Drive
+  const icloudPath = path.join(HOME, 'Library', 'Mobile Documents', 'com~apple~CloudDocs');
+  if (fs.existsSync(icloudPath)) {
+    locations.push({ name: 'iCloud Drive', basePath: icloudPath });
+  }
+
+  // Dropbox
+  const dropboxPath = path.join(HOME, 'Dropbox');
+  if (fs.existsSync(dropboxPath)) {
+    locations.push({ name: 'Dropbox', basePath: dropboxPath });
+  }
+
+  // Documents
+  const documentsPath = path.join(HOME, 'Documents');
+  if (fs.existsSync(documentsPath)) {
+    locations.push({ name: 'Documents', basePath: documentsPath });
+  }
+
+  return locations;
+}
+
+async function runInteractiveSetup(): Promise<void> {
+  console.log('\n' + chalk.bold('=== Granola Sync Setup ===') + '\n');
+
+  // Check Granola is installed
+  if (!fs.existsSync(GRANOLA_AUTH_PATH)) {
+    console.error(chalk.red('ERROR: Granola not found'));
+    console.error(`  Expected: ${GRANOLA_AUTH_PATH}`);
+    console.error('  Please install and run Granola first.');
+    process.exit(1);
+  }
+  console.log(chalk.green('✓') + ' Granola detected');
+
+  // Check local cache
+  if (fs.existsSync(GRANOLA_CACHE_PATH)) {
+    const meetings = getMeetingsFromCache();
+    const meetingCount = Object.keys(meetings).length;
+    const withContent = Object.values(meetings).filter(
+      (m) => (m.transcribe || m.notes_markdown) && !m.deleted_at
+    ).length;
+    console.log(chalk.green('✓') + ` Local cache: ${meetingCount} meetings (${withContent} with content)`);
+  } else {
+    console.log(chalk.yellow('!') + ' Local cache not found — run Granola first to populate it');
+  }
+
+  console.log('');
+
+  // Detect available sync locations
+  const locations = detectSyncLocations();
+
+  const choices = locations.map((loc) => ({
+    title: `${loc.name}`,
+    description: path.join(loc.basePath, DRIVE_FOLDER_NAME),
+    value: path.join(loc.basePath, DRIVE_FOLDER_NAME),
+  }));
+
+  choices.push({
+    title: 'Custom path',
+    description: 'Enter a custom directory path',
+    value: '__custom__',
+  });
+
+  // Handle Ctrl+C / abort gracefully
+  prompts.override({});
+  const onCancel = () => {
+    console.log('\nSetup cancelled.');
+    process.exit(0);
+  };
+
+  const { location } = await prompts(
+    {
+      type: 'select',
+      name: 'location',
+      message: 'Where should Granola transcripts be synced?',
+      choices,
+      hint: '— Use arrow keys to navigate, Enter to select',
+    },
+    { onCancel }
+  );
+
+  let outputDir: string;
+
+  if (location === '__custom__') {
+    const { customPath } = await prompts(
+      {
+        type: 'text',
+        name: 'customPath',
+        message: 'Enter the full path to the output directory:',
+        initial: path.join(HOME, 'Documents', DRIVE_FOLDER_NAME),
+        validate: (val: string) => val.trim().length > 0 || 'Path cannot be empty',
+      },
+      { onCancel }
+    );
+    outputDir = expandUser(customPath.trim());
+  } else {
+    outputDir = location;
+  }
+
+  // Validate and create the directory
+  const { ok, error } = validateWritable(outputDir);
+  if (!ok) {
+    console.error(chalk.red(`\nERROR: ${error}`));
+    process.exit(1);
+  }
+
+  // Save config
+  const config = loadConfig();
+  config.output_dir = outputDir;
+  saveConfig(config);
+
+  console.log('');
+  console.log(chalk.green('✓') + ` Output directory configured: ${chalk.cyan(outputDir)}`);
+  console.log(chalk.green('✓') + ` Config saved: ${CONFIG_PATH}`);
+
+  // Show sync state summary
+  const state = loadSyncState();
+  const uploadedCount = Object.keys(state.uploaded_meetings).length;
+  if (uploadedCount > 0) {
+    console.log(`  Already synced: ${uploadedCount} meetings`);
+  }
+
+  console.log('');
+
+  // Ask about first sync
+  const { runSync } = await prompts(
+    {
+      type: 'confirm',
+      name: 'runSync',
+      message: 'Run first sync now?',
+      initial: true,
+    },
+    { onCancel }
+  );
+
+  if (runSync) {
+    console.log('');
+    await syncMeetings(outputDir);
+  } else {
+    console.log('');
+    console.log('To sync manually:          ' + chalk.cyan('granola-sync sync'));
+    console.log('To install auto-sync:      ' + chalk.cyan('./install_launchagent.sh'));
+    console.log(`Logs: ${LOG_PATH}`);
+  }
+}
+
 export function registerSetup(program: Command): void {
   program
     .command('setup')
-    .description('Check configuration and show setup status')
-    .option('--output-dir <path>', 'Set the output directory for synced files')
-    .action((opts: { outputDir?: string }) => {
+    .description('Configure sync location interactively, or pass --output-dir for non-interactive use')
+    .option('--output-dir <path>', 'Set the output directory (non-interactive)')
+    .action(async (opts: { outputDir?: string }) => {
       ensureConfigDir();
 
-      console.log('\n=== Granola to Google Drive Sync ===\n');
-
-      // Configure output directory if provided
+      // Non-interactive mode: --output-dir flag provided
       if (opts.outputDir) {
+        console.log('\n=== Granola to Google Drive Sync ===\n');
+
         const p = expandUser(opts.outputDir);
         const { ok, error } = validateWritable(p);
         if (!ok) {
@@ -47,71 +203,45 @@ export function registerSetup(program: Command): void {
         config.output_dir = p;
         saveConfig(config);
         console.log(`Output directory configured: ${p}`);
-      }
 
-      // Check Granola
-      if (!fs.existsSync(GRANOLA_AUTH_PATH)) {
-        console.error('ERROR: Granola not found');
-        console.error(`  Expected: ${GRANOLA_AUTH_PATH}`);
-        process.exit(1);
-      }
-      console.log('Granola: OK');
-
-      // Check local cache
-      if (fs.existsSync(GRANOLA_CACHE_PATH)) {
-        const meetings = getMeetingsFromCache();
-        const meetingCount = Object.keys(meetings).length;
-        const withContent = Object.values(meetings).filter(
-          (m) => (m.transcribe || m.notes_markdown) && !m.deleted_at
-        ).length;
-        console.log(`Local cache: ${meetingCount} meetings (${withContent} with content)`);
-      } else {
-        console.log('Local cache: Not found (run Granola first)');
-      }
-
-      // Check Google Drive
-      const driveFolder = findGoogleDriveFolder();
-      if (!driveFolder) {
-        console.log('Google Drive: NOT FOUND');
-        console.log('  Install Google Drive desktop app and sign in');
-      } else {
-        console.log(`Google Drive: ${driveFolder}`);
-      }
-
-      // Determine output folder
-      const config = loadConfig();
-      if (config.output_dir) {
-        const outputFolder = expandUser(config.output_dir as string);
-        const { ok, error } = validateWritable(outputFolder);
-        if (!ok) {
-          console.error(`Output folder: ERROR — ${error}`);
+        // Check Granola
+        if (!fs.existsSync(GRANOLA_AUTH_PATH)) {
+          console.error('ERROR: Granola not found');
+          console.error(`  Expected: ${GRANOLA_AUTH_PATH}`);
           process.exit(1);
         }
-        console.log(`Output folder: ${outputFolder} (from config)`);
-        console.log(`Config file:   ${CONFIG_PATH}`);
-      } else if (driveFolder) {
-        const outputFolder = path.join(driveFolder, DRIVE_FOLDER_NAME);
-        fs.mkdirSync(outputFolder, { recursive: true });
-        console.log(`Output folder: ${outputFolder} (Google Drive default)`);
-      } else {
-        console.log('Output folder: NOT CONFIGURED');
-        console.log('  Set one with: granola-sync setup --output-dir <path>');
-        process.exit(1);
+        console.log('Granola: OK');
+
+        // Check local cache
+        if (fs.existsSync(GRANOLA_CACHE_PATH)) {
+          const meetings = getMeetingsFromCache();
+          const meetingCount = Object.keys(meetings).length;
+          const withContent = Object.values(meetings).filter(
+            (m) => (m.transcribe || m.notes_markdown) && !m.deleted_at
+          ).length;
+          console.log(`Local cache: ${meetingCount} meetings (${withContent} with content)`);
+        } else {
+          console.log('Local cache: Not found (run Granola first)');
+        }
+
+        // Check sync state
+        const state = loadSyncState();
+        const uploadedCount = Object.keys(state.uploaded_meetings).length;
+        const lastSync = state.last_sync || 'Never';
+        console.log(`Already synced: ${uploadedCount} meetings`);
+        console.log(`Last sync: ${lastSync}`);
+
+        console.log('\n=== Ready to sync! ===');
+        console.log('\nTo run manually:');
+        console.log('  granola-sync sync');
+        console.log('\nTo install auto-sync (every 30 min):');
+        console.log('  ./install_launchagent.sh');
+        console.log(`\nLogs: ${LOG_PATH}`);
+        return;
       }
 
-      // Check sync state
-      const state = loadSyncState();
-      const uploadedCount = Object.keys(state.uploaded_meetings).length;
-      const lastSync = state.last_sync || 'Never';
-      console.log(`Already synced: ${uploadedCount} meetings`);
-      console.log(`Last sync: ${lastSync}`);
-
-      console.log('\n=== Ready to sync! ===');
-      console.log('\nTo run manually:');
-      console.log('  granola-sync sync');
-      console.log('\nTo install auto-sync (every 30 min):');
-      console.log('  ./install_launchagent.sh');
-      console.log(`\nLogs: ${LOG_PATH}`);
+      // Interactive mode
+      await runInteractiveSetup();
     });
 }
 
