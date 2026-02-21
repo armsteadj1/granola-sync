@@ -12,10 +12,12 @@ import os
 import sys
 import logging
 import hashlib
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+import click
 import requests
 
 # Paths
@@ -24,6 +26,7 @@ GRANOLA_AUTH_PATH = HOME / "Library/Application Support/Granola/supabase.json"
 GRANOLA_CACHE_PATH = HOME / "Library/Application Support/Granola/cache-v3.json"
 CONFIG_DIR = HOME / ".config/granola-sync"
 SYNC_STATE_PATH = CONFIG_DIR / "sync_state.json"
+CONFIG_PATH = CONFIG_DIR / "config.json"
 LOG_PATH = HOME / "Library/Logs/granola-sync.log"
 
 # Google Drive desktop app folder
@@ -53,6 +56,21 @@ def ensure_config_dir():
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def load_config() -> dict:
+    """Load configuration from config file."""
+    if CONFIG_PATH.exists():
+        with open(CONFIG_PATH) as f:
+            return json.load(f)
+    return {}
+
+
+def save_config(config: dict):
+    """Save configuration to config file."""
+    ensure_config_dir()
+    with open(CONFIG_PATH, "w") as f:
+        json.dump(config, f, indent=2)
+
+
 def find_google_drive_folder() -> Optional[Path]:
     """Find the Google Drive My Drive folder."""
     if not GOOGLE_DRIVE_BASE.exists():
@@ -68,8 +86,22 @@ def find_google_drive_folder() -> Optional[Path]:
     return None
 
 
-def get_output_folder() -> Path:
-    """Get or create the Granola Transcripts folder in Google Drive."""
+def get_output_folder(output_dir: Optional[Path] = None) -> Path:
+    """Get or create the output folder for synced files."""
+    # Use explicitly provided path first
+    if output_dir:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        return output_dir
+
+    # Then check config
+    config = load_config()
+    configured_dir = config.get("output_dir")
+    if configured_dir:
+        path = Path(configured_dir).expanduser()
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    # Fall back to Google Drive
     drive_folder = find_google_drive_folder()
     if not drive_folder:
         raise FileNotFoundError(
@@ -335,8 +367,8 @@ def generate_meeting_hash(document: dict) -> str:
     return hashlib.sha256(f"{title}{created}".encode()).hexdigest()[:16]
 
 
-def sync_meetings():
-    """Main sync function - syncs meetings to Google Drive folder."""
+def sync_meetings(output_dir: Optional[Path] = None):
+    """Main sync function - syncs meetings to the output folder."""
     logger.info("Starting Granola to Google Drive sync...")
 
     ensure_config_dir()
@@ -345,7 +377,7 @@ def sync_meetings():
 
     # Get output folder
     try:
-        output_folder = get_output_folder()
+        output_folder = get_output_folder(output_dir)
         logger.info(f"Output folder: {output_folder}")
     except FileNotFoundError as e:
         logger.error(str(e))
@@ -425,7 +457,7 @@ def sync_meetings():
         safe_title = "".join(c for c in title if c.isalnum() or c in " -_").strip()[:50]
         filename = f"{date_prefix} - {safe_title}.md"
 
-        # Write to Google Drive folder
+        # Write to output folder
         try:
             output_path = output_folder / filename
             with open(output_path, "w") as f:
@@ -448,18 +480,30 @@ def sync_meetings():
     logger.info(f"Sync complete. Created {new_count} new files. Skipped {skipped} without content.")
 
 
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+@click.group()
+@click.version_option(version="0.2.0")
+def cli():
+    """Sync Granola meeting transcripts to Google Drive."""
+    pass
+
+
+@cli.command()
 def setup():
-    """Check setup and show status."""
+    """Check configuration and show setup status."""
     ensure_config_dir()
 
-    print("\n=== Granola to Google Drive Sync ===\n")
+    click.echo("\n=== Granola to Google Drive Sync ===\n")
 
     # Check Granola
     if not GRANOLA_AUTH_PATH.exists():
-        print("ERROR: Granola not found")
-        print(f"  Expected: {GRANOLA_AUTH_PATH}")
-        return False
-    print("Granola: OK")
+        click.echo("ERROR: Granola not found")
+        click.echo(f"  Expected: {GRANOLA_AUTH_PATH}")
+        sys.exit(1)
+    click.echo("Granola: OK")
 
     # Check local cache
     if GRANOLA_CACHE_PATH.exists():
@@ -467,54 +511,236 @@ def setup():
         with_content = sum(1 for m in meetings.values()
                          if (m.get("transcribe") or m.get("notes_markdown"))
                          and not m.get("deleted_at"))
-        print(f"Local cache: {len(meetings)} meetings ({with_content} with content)")
+        click.echo(f"Local cache: {len(meetings)} meetings ({with_content} with content)")
     else:
-        print("Local cache: Not found (run Granola first)")
+        click.echo("Local cache: Not found (run Granola first)")
 
     # Check Google Drive
     drive_folder = find_google_drive_folder()
     if not drive_folder:
-        print("Google Drive: NOT FOUND")
-        print("  Install Google Drive desktop app and sign in")
-        return False
-    print(f"Google Drive: {drive_folder}")
+        click.echo("Google Drive: NOT FOUND")
+        click.echo("  Install Google Drive desktop app and sign in")
+        sys.exit(1)
+    click.echo(f"Google Drive: {drive_folder}")
 
-    # Create output folder
-    output_folder = drive_folder / DRIVE_FOLDER_NAME
-    output_folder.mkdir(exist_ok=True)
-    print(f"Output folder: {output_folder}")
+    # Determine output folder
+    config = load_config()
+    if config.get("output_dir"):
+        output_folder = Path(config["output_dir"]).expanduser()
+    else:
+        output_folder = drive_folder / DRIVE_FOLDER_NAME
+    output_folder.mkdir(parents=True, exist_ok=True)
+    click.echo(f"Output folder: {output_folder}")
 
     # Check sync state
     state = load_sync_state()
     uploaded_count = len(state.get("uploaded_meetings", {}))
     last_sync = state.get("last_sync", "Never")
-    print(f"Already synced: {uploaded_count} meetings")
-    print(f"Last sync: {last_sync}")
+    click.echo(f"Already synced: {uploaded_count} meetings")
+    click.echo(f"Last sync: {last_sync}")
 
-    print("\n=== Ready to sync! ===")
-    print("\nTo run manually:")
-    print("  python granola_sync.py")
-    print("\nTo install auto-sync (every 30 min):")
-    print("  ./install_launchagent.sh")
-    print(f"\nLogs: {LOG_PATH}")
-
-    return True
+    click.echo("\n=== Ready to sync! ===")
+    click.echo("\nTo run manually:")
+    click.echo("  python granola_sync.py sync")
+    click.echo("\nTo install auto-sync (every 30 min):")
+    click.echo("  ./install_launchagent.sh")
+    click.echo(f"\nLogs: {LOG_PATH}")
 
 
-def main():
-    if len(sys.argv) > 1:
-        if sys.argv[1] == "--setup":
-            setup()
-        elif sys.argv[1] == "--help":
-            print("Usage: granola_sync.py [--setup | --help]")
-            print("  --setup  Check configuration")
-            print("  --help   Show this help")
-            print("  (no args) Run sync")
-        else:
-            print(f"Unknown argument: {sys.argv[1]}")
+@cli.command()
+@click.option(
+    "--output-dir", "-o",
+    type=click.Path(),
+    default=None,
+    help="Output directory for synced files (overrides config).",
+)
+def sync(output_dir):
+    """Sync Granola meetings to the output directory."""
+    out = Path(output_dir).expanduser() if output_dir else None
+    sync_meetings(output_dir=out)
+
+
+@cli.command()
+def status():
+    """Show the current sync status."""
+    ensure_config_dir()
+    state = load_sync_state()
+
+    uploaded_count = len(state.get("uploaded_meetings", {}))
+    last_sync = state.get("last_sync", "Never")
+
+    config = load_config()
+    configured_dir = config.get("output_dir")
+
+    click.echo(f"Last sync:    {last_sync}")
+    click.echo(f"Synced files: {uploaded_count}")
+
+    if configured_dir:
+        click.echo(f"Output dir:   {configured_dir} (from config)")
     else:
-        sync_meetings()
+        drive_folder = find_google_drive_folder()
+        if drive_folder:
+            click.echo(f"Output dir:   {drive_folder / DRIVE_FOLDER_NAME} (Google Drive default)")
+        else:
+            click.echo("Output dir:   Google Drive not found — run 'setup' for details")
+
+    click.echo(f"Log file:     {LOG_PATH}")
+    click.echo(f"Config dir:   {CONFIG_DIR}")
+
+
+@cli.command("config")
+@click.option(
+    "--output-dir",
+    type=click.Path(),
+    default=None,
+    help="Set the output directory for synced files.",
+)
+@click.option(
+    "--show",
+    is_flag=True,
+    default=False,
+    help="Print current configuration.",
+)
+def config_cmd(output_dir, show):
+    """View or update configuration settings."""
+    config = load_config()
+
+    if output_dir:
+        config["output_dir"] = str(Path(output_dir).expanduser())
+        save_config(config)
+        click.echo(f"Output directory set to: {config['output_dir']}")
+
+    if show or not output_dir:
+        if config:
+            click.echo(json.dumps(config, indent=2))
+        else:
+            click.echo("No configuration set. Using defaults.")
+            click.echo(f"Config file: {CONFIG_PATH}")
+
+
+@cli.command()
+@click.option(
+    "--interval",
+    default=1800,
+    show_default=True,
+    help="Seconds between sync runs.",
+)
+@click.option(
+    "--output-dir", "-o",
+    type=click.Path(),
+    default=None,
+    help="Output directory for synced files (overrides config).",
+)
+def daemon(interval, output_dir):
+    """Run continuously, syncing on a fixed interval."""
+    out = Path(output_dir).expanduser() if output_dir else None
+    click.echo(f"Starting daemon — syncing every {interval}s. Press Ctrl+C to stop.")
+    click.echo(f"Log file: {LOG_PATH}")
+    try:
+        while True:
+            sync_meetings(output_dir=out)
+            click.echo(f"Next sync in {interval}s...")
+            time.sleep(interval)
+    except KeyboardInterrupt:
+        click.echo("\nDaemon stopped.")
+
+
+@cli.command()
+@click.option(
+    "--json", "json_output",
+    is_flag=True,
+    default=False,
+    help="Output results as JSON (useful for AI agents).",
+)
+def doctor(json_output):
+    """Run diagnostic checks and report health status."""
+    checks = {}
+
+    # Granola auth
+    checks["granola_auth"] = {
+        "ok": GRANOLA_AUTH_PATH.exists(),
+        "path": str(GRANOLA_AUTH_PATH),
+    }
+
+    # Granola cache
+    if GRANOLA_CACHE_PATH.exists():
+        meetings = get_meetings_from_cache()
+        checks["granola_cache"] = {
+            "ok": True,
+            "path": str(GRANOLA_CACHE_PATH),
+            "meetings": len(meetings),
+        }
+    else:
+        checks["granola_cache"] = {
+            "ok": False,
+            "path": str(GRANOLA_CACHE_PATH),
+            "meetings": 0,
+        }
+
+    # Google Drive
+    drive_folder = find_google_drive_folder()
+    checks["google_drive"] = {
+        "ok": drive_folder is not None,
+        "path": str(drive_folder) if drive_folder else None,
+    }
+
+    # Config dir
+    checks["config_dir"] = {
+        "ok": CONFIG_DIR.exists(),
+        "path": str(CONFIG_DIR),
+    }
+
+    # Output directory
+    config = load_config()
+    configured_dir = config.get("output_dir")
+    if configured_dir:
+        out_path = Path(configured_dir).expanduser()
+        checks["output_dir"] = {
+            "ok": out_path.exists(),
+            "path": str(out_path),
+            "source": "config",
+        }
+    elif drive_folder:
+        out_path = drive_folder / DRIVE_FOLDER_NAME
+        checks["output_dir"] = {
+            "ok": True,
+            "path": str(out_path),
+            "source": "google_drive_default",
+        }
+    else:
+        checks["output_dir"] = {
+            "ok": False,
+            "path": None,
+            "source": None,
+        }
+
+    all_ok = all(c["ok"] for c in checks.values())
+    result = {
+        "status": "ok" if all_ok else "error",
+        "checks": checks,
+        "summary": "All checks passed." if all_ok else "One or more checks failed.",
+    }
+
+    if json_output:
+        click.echo(json.dumps(result, indent=2))
+    else:
+        click.echo(f"Status: {result['status'].upper()}")
+        click.echo("")
+        for name, check in checks.items():
+            icon = "OK" if check["ok"] else "FAIL"
+            label = name.replace("_", " ").title()
+            detail = check.get("path") or ""
+            if name == "granola_cache" and check["ok"]:
+                detail += f" ({check['meetings']} meetings)"
+            if name == "output_dir" and check.get("source"):
+                detail += f" [{check['source']}]"
+            click.echo(f"  [{icon}] {label}: {detail}")
+        click.echo("")
+        click.echo(result["summary"])
+
+    if not all_ok:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
-    main()
+    cli()
