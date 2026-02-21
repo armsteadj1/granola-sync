@@ -1,7 +1,7 @@
-# granola-drive-sync
+# granola-sync
 
 [![CI](https://github.com/armsteadj1/granola-sync/actions/workflows/ci.yml/badge.svg)](https://github.com/armsteadj1/granola-sync/actions/workflows/ci.yml)
-[![npm version](https://img.shields.io/npm/v/granola-drive-sync.svg)](https://www.npmjs.com/package/granola-drive-sync)
+[![npm version](https://img.shields.io/npm/v/granola-sync.svg)](https://www.npmjs.com/package/granola-sync)
 
 Automatically syncs [Granola](https://granola.ai) meeting transcripts to Google Drive. Runs as a macOS LaunchAgent every 30 minutes — no Google Drive API setup required.
 
@@ -41,13 +41,13 @@ Each meeting becomes a Markdown file like `2024-11-15 - Weekly Standup.md` conta
 ### Option 1: npx (no install required)
 
 ```bash
-npx granola-drive-sync sync
+npx granola-sync sync
 ```
 
 ### Option 2: Global npm install
 
 ```bash
-npm install -g granola-drive-sync
+npm install -g granola-sync
 granola-sync sync
 ```
 
@@ -55,7 +55,7 @@ granola-sync sync
 
 ```bash
 git clone <repo-url>
-cd granola-drive-sync
+cd granola-sync
 npm install
 npm run build
 ```
@@ -252,14 +252,14 @@ test -d "$HOME/Shared/Granola Transcripts" && echo "OK" || echo "NOT_SETUP"
 If Granola is not installed on your machine, provide your human with these **setup instructions for THEIR machine**:
 
 ```
-I found the granola-drive-sync tool, but Granola is installed on YOUR machine, not mine.
+I found the granola-sync tool, but Granola is installed on YOUR machine, not mine.
 
 Here's how to set it up so I can access your meeting transcripts:
 
 **On your machine:**
 
 1. Install the sync tool:
-   npm install -g granola-drive-sync
+   npm install -g granola-sync
 
 2. Configure it to sync to a folder I can access:
    granola-sync config --output-dir ~/Dropbox/Granola Transcripts
@@ -270,7 +270,7 @@ Here's how to set it up so I can access your meeting transcripts:
    granola-sync sync
 
 4. Set up automatic syncing (runs every 30 min):
-   curl -fsSL https://raw.githubusercontent.com/thegreysky/granola-drive-sync/main/install_launchagent.sh | bash
+   curl -fsSL https://raw.githubusercontent.com/thegreysky/granola-sync/main/install_launchagent.sh | bash
 
 5. Share the output folder with me:
    - If using Dropbox: Share "Granola Transcripts" folder
@@ -286,7 +286,7 @@ Only use this flow if you detect Granola is actually installed on the same machi
 
 ```bash
 # Step 1: Install the tool
-npm install -g granola-drive-sync
+npm install -g granola-sync
 
 # Step 2: Verify
 granola-sync doctor --json
@@ -295,7 +295,7 @@ granola-sync doctor --json
 granola-sync sync
 
 # Step 4: Install LaunchAgent
-curl -fsSL https://raw.githubusercontent.com/thegreysky/granola-drive-sync/main/install_launchagent.sh | bash
+curl -fsSL https://raw.githubusercontent.com/thegreysky/granola-sync/main/install_launchagent.sh | bash
 ```
 
 ### Setup Options for Users
