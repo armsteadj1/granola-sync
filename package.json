@@ -11,6 +11,15 @@
     "prepare": "npm run build",
     "start": "node dist/index.js"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/armsteadj1/granola-sync.git"
+  },
+  "homepage": "https://github.com/armsteadj1/granola-sync#readme",
+  "bugs": {
+    "url": "https://github.com/armsteadj1/granola-sync/issues"
+  },
+  "author": "James Armstead",
   "engines": {
     "node": ">=18.0.0"
   },
@@ -25,6 +34,11 @@
     "@types/node": "^20.10.0",
     "typescript": "^5.3.2"
   },
-  "keywords": ["granola", "google-drive", "sync", "transcripts", "meetings"],
-  "license": "MIT"
+  "keywords": ["granola", "google-drive", "sync", "transcripts", "meetings", "cli"],
+  "license": "MIT",
+  "files": [
+    "dist",
+    "README.md",
+    "install_launchagent.sh"
+  ]
 }
