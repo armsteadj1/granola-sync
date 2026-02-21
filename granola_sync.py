@@ -9,6 +9,7 @@ Designed to run as a macOS LaunchAgent every 30 minutes.
 
 import json
 import os
+import subprocess
 import sys
 import logging
 import hashlib
@@ -509,6 +510,95 @@ def sync_meetings(output_dir: Optional[Path] = None):
 
 
 # ---------------------------------------------------------------------------
+# Status helpers
+# ---------------------------------------------------------------------------
+
+LAUNCHAGENT_LABEL = "com.user.granola-sync"
+LAUNCHAGENT_PLIST = Path.home() / "Library/LaunchAgents" / f"{LAUNCHAGENT_LABEL}.plist"
+
+
+def check_daemon_status() -> dict:
+    """Check if the granola-sync LaunchAgent daemon is installed and running."""
+    result = {"installed": LAUNCHAGENT_PLIST.exists(), "running": False, "pid": None}
+    if result["installed"]:
+        try:
+            proc = subprocess.run(
+                ["launchctl", "list", LAUNCHAGENT_LABEL],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if proc.returncode == 0:
+                result["running"] = True
+                # First line of output: PID  Status  Label
+                first_line = proc.stdout.strip().split("\n")[0]
+                parts = first_line.split()
+                if parts and parts[0].lstrip("-").isdigit() and parts[0] != "-":
+                    result["pid"] = int(parts[0])
+        except Exception:
+            pass
+    return result
+
+
+def parse_recent_log_errors(max_lines: int = 300, max_errors: int = 5) -> list:
+    """Return the most recent ERROR/WARNING lines from the log file."""
+    errors = []
+    if not LOG_PATH.exists():
+        return errors
+    try:
+        with open(LOG_PATH) as f:
+            lines = f.readlines()
+        recent = lines[-max_lines:] if len(lines) > max_lines else lines
+        for line in reversed(recent):
+            stripped = line.strip()
+            if " - ERROR - " in stripped or " - WARNING - " in stripped:
+                errors.append(stripped)
+                if len(errors) >= max_errors:
+                    break
+        errors.reverse()
+    except Exception:
+        pass
+    return errors
+
+
+def format_relative_time(dt: datetime) -> str:
+    """Return a human-friendly relative time string (e.g. '26 minutes ago')."""
+    diff = int((datetime.now() - dt).total_seconds())
+    if diff < 60:
+        return f"{diff} second{'s' if diff != 1 else ''} ago"
+    elif diff < 3600:
+        m = diff // 60
+        return f"{m} minute{'s' if m != 1 else ''} ago"
+    elif diff < 86400:
+        h = diff // 3600
+        return f"{h} hour{'s' if h != 1 else ''} ago"
+    else:
+        d = diff // 86400
+        return f"{d} day{'s' if d != 1 else ''} ago"
+
+
+def format_size(size_bytes: int) -> str:
+    """Format a byte count as a human-readable string."""
+    val = float(size_bytes)
+    for unit in ("B", "KB", "MB", "GB"):
+        if val < 1024:
+            return f"{val:.1f} {unit}"
+        val /= 1024
+    return f"{val:.1f} TB"
+
+
+def _fmt_date(date_str: str) -> str:
+    """Format an ISO date string for compact display."""
+    if not date_str:
+        return "unknown date"
+    try:
+        dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+        return dt.strftime("%Y-%m-%d %H:%M")
+    except (ValueError, AttributeError):
+        return date_str
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -618,31 +708,211 @@ def sync(output_dir):
 
 
 @cli.command()
-def status():
-    """Show the current sync status."""
+@click.option(
+    "--json", "json_output",
+    is_flag=True,
+    default=False,
+    help="Output results as JSON (machine-readable format).",
+)
+def status(json_output):
+    """Show detailed sync status: meetings, pending, errors, daemon, and output dir."""
     ensure_config_dir()
+
+    # --- Load data (no API calls) ---
     state = load_sync_state()
+    uploaded = state.get("uploaded_meetings", {})
+    last_sync_str = state.get("last_sync")
+    meetings = get_meetings_from_cache()
 
-    uploaded_count = len(state.get("uploaded_meetings", {}))
-    last_sync = state.get("last_sync", "Never")
+    # Categorize meetings
+    in_progress_meetings = []
+    deleted_meetings = []
+    no_content_meetings = []
+    pending_meetings = []
+    synced_count = 0
 
+    for doc_id, meeting in meetings.items():
+        meeting_hash = generate_meeting_hash(meeting)
+        title = meeting.get("title") or "Untitled"
+        created_at = meeting.get("created_at", "")
+
+        if meeting_hash in uploaded:
+            synced_count += 1
+            continue
+
+        if meeting.get("deleted_at") or meeting.get("was_trashed"):
+            deleted_meetings.append({"title": title, "date": created_at, "reason": "deleted"})
+        elif meeting.get("meeting_end_count", 0) == 0:
+            in_progress_meetings.append({"title": title, "date": created_at, "reason": "still recording"})
+        elif not meeting.get("notes_markdown"):
+            no_content_meetings.append({"title": title, "date": created_at, "reason": "no transcript or notes"})
+        else:
+            pending_meetings.append({"title": title, "date": created_at, "reason": "not yet synced"})
+
+    total_meetings = len(meetings)
+    pending_count = len(in_progress_meetings) + len(no_content_meetings) + len(pending_meetings)
+
+    # --- Output directory info ---
     config = load_config()
     configured_dir = config.get("output_dir")
-
-    click.echo(f"Last sync:    {last_sync}")
-    click.echo(f"Synced files: {uploaded_count}")
+    output_dir_path = None
+    output_dir_source = None
+    output_dir_size = None
+    output_dir_file_count = None
 
     if configured_dir:
-        click.echo(f"Output dir:   {configured_dir} (from config)")
+        output_dir_path = Path(configured_dir).expanduser()
+        output_dir_source = "config"
     else:
         drive_folder = find_google_drive_folder()
         if drive_folder:
-            click.echo(f"Output dir:   {drive_folder / DRIVE_FOLDER_NAME} (Google Drive default)")
-        else:
-            click.echo("Output dir:   Google Drive not found — run 'setup' for details")
+            output_dir_path = drive_folder / DRIVE_FOLDER_NAME
+            output_dir_source = "google_drive_default"
 
-    click.echo(f"Log file:     {LOG_PATH}")
-    click.echo(f"Config dir:   {CONFIG_DIR}")
+    if output_dir_path and output_dir_path.exists():
+        try:
+            md_files = list(output_dir_path.glob("*.md"))
+            output_dir_file_count = len(md_files)
+            output_dir_size = sum(f.stat().st_size for f in md_files)
+        except Exception:
+            pass
+
+    # --- Daemon status & recent errors ---
+    daemon_info = check_daemon_status()
+    recent_errors = parse_recent_log_errors()
+
+    # --- Parse last sync datetime ---
+    last_sync_dt = None
+    if last_sync_str:
+        try:
+            last_sync_dt = datetime.fromisoformat(last_sync_str)
+        except ValueError:
+            pass
+
+    # =========================================================
+    # JSON output
+    # =========================================================
+    if json_output:
+        result = {
+            "last_sync": last_sync_str,
+            "meetings": {
+                "synced": synced_count,
+                "total": total_meetings,
+                "pending": pending_count,
+            },
+            "pending_details": {
+                "in_progress": in_progress_meetings,
+                "no_content": no_content_meetings,
+                "unsynced": pending_meetings,
+                "deleted": deleted_meetings,
+            },
+            "output_dir": {
+                "path": str(output_dir_path) if output_dir_path else None,
+                "source": output_dir_source,
+                "exists": output_dir_path.exists() if output_dir_path else False,
+                "file_count": output_dir_file_count,
+                "size_bytes": output_dir_size,
+            },
+            "daemon": daemon_info,
+            "recent_errors": recent_errors,
+        }
+        click.echo(json.dumps(result, indent=2))
+        return
+
+    # =========================================================
+    # Human-readable colorized output
+    # =========================================================
+    click.echo("")
+    click.echo(click.style("Granola Sync Status", bold=True))
+    click.echo("=" * 40)
+    click.echo("")
+
+    # Last sync
+    if last_sync_dt:
+        rel = format_relative_time(last_sync_dt)
+        formatted = last_sync_dt.strftime("%Y-%m-%d %H:%M")
+        click.echo(f"Last sync:  {click.style(formatted, fg='green')} ({rel})")
+    else:
+        click.echo(f"Last sync:  {click.style('Never', fg='yellow')}")
+
+    click.echo("")
+
+    # Meetings summary
+    if total_meetings == 0:
+        click.echo(click.style("Meetings:   No meetings found in local cache", fg="yellow"))
+    else:
+        synced_color = "green" if synced_count == total_meetings else "cyan"
+        click.echo(
+            f"Meetings:   {click.style(str(synced_count), fg=synced_color)} synced"
+            f" / {total_meetings} total"
+        )
+        if pending_count > 0:
+            click.echo(f"Pending:    {click.style(str(pending_count), fg='yellow')} meetings")
+
+    # In-progress meetings
+    if in_progress_meetings:
+        click.echo("")
+        click.echo(click.style("In Progress:", bold=True, fg="cyan"))
+        for m in in_progress_meetings[:5]:
+            click.echo(f"  - \"{m['title']}\" ({_fmt_date(m['date'])}) — still recording")
+        if len(in_progress_meetings) > 5:
+            click.echo(f"  ... and {len(in_progress_meetings) - 5} more")
+
+    # Pending (have notes, not yet synced)
+    if pending_meetings:
+        click.echo("")
+        click.echo(click.style("Pending Sync:", bold=True, fg="yellow"))
+        for m in pending_meetings[:5]:
+            click.echo(f"  - \"{m['title']}\" ({_fmt_date(m['date'])})")
+        if len(pending_meetings) > 5:
+            click.echo(f"  ... and {len(pending_meetings) - 5} more")
+
+    # Skipped (no content)
+    if no_content_meetings:
+        click.echo("")
+        click.echo(click.style("Skipped (no content):", bold=True))
+        for m in no_content_meetings[:3]:
+            click.echo(f"  - \"{m['title']}\" ({_fmt_date(m['date'])})")
+        if len(no_content_meetings) > 3:
+            click.echo(f"  ... and {len(no_content_meetings) - 3} more")
+
+    # Output directory
+    click.echo("")
+    if output_dir_path:
+        if output_dir_path.exists():
+            parts = []
+            if output_dir_file_count is not None:
+                parts.append(f"{output_dir_file_count} files")
+            if output_dir_size is not None:
+                parts.append(format_size(output_dir_size))
+            if output_dir_source:
+                parts.append(output_dir_source)
+            detail = f" ({', '.join(parts)})" if parts else ""
+            click.echo(f"Output:     {click.style(str(output_dir_path), fg='green')}{detail}")
+        else:
+            click.echo(f"Output:     {click.style(str(output_dir_path), fg='red')} (directory not found)")
+    else:
+        click.echo(f"Output:     {click.style('Not configured — run setup', fg='red')}")
+
+    # Daemon status
+    click.echo("")
+    if daemon_info["installed"]:
+        if daemon_info["running"]:
+            pid_str = f" (PID {daemon_info['pid']})" if daemon_info.get("pid") else ""
+            click.echo(f"Daemon:     {click.style('Running', fg='green')}{pid_str}")
+        else:
+            click.echo(f"Daemon:     {click.style('Installed but not running', fg='yellow')}")
+    else:
+        click.echo(f"Daemon:     {click.style('Not installed', fg='yellow')} — run ./install_launchagent.sh")
+
+    # Recent errors / warnings
+    if recent_errors:
+        click.echo("")
+        click.echo(click.style("Recent errors/warnings:", bold=True, fg="red"))
+        for err in recent_errors:
+            click.echo(f"  {err}")
+
+    click.echo("")
 
 
 @cli.command("config")
