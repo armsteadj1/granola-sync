@@ -1,7 +1,7 @@
 {
   "name": "@armsteadj1/granola-sync",
-  "version": "0.2.3",
-  "description": "Sync Granola meeting transcripts to Google Drive",
+  "version": "0.2.4",
+  "description": "Sync Granola meeting transcripts to a configured folder",
   "main": "dist/index.js",
   "bin": {
     "granola-sync": "dist/index.js"

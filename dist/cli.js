@@ -215,7 +215,7 @@ function registerSetup(program) {
         (0, config_1.ensureConfigDir)();
         // Non-interactive mode: --output-dir flag provided
         if (opts.outputDir) {
-            console.log('\n=== Granola to Google Drive Sync ===\n');
+            console.log('\n=== Granola Sync Setup ===\n');
             const p = expandUser(opts.outputDir);
             const { ok, error } = (0, sync_1.validateWritable)(p);
             if (!ok) {

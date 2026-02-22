@@ -69,11 +69,11 @@ export function getOutputFolder(outputDir?: string): string {
     return expanded;
   }
 
-  // Fall back to Google Drive
+  // Fall back to default location (Google Drive)
   const driveFolder = findGoogleDriveFolder();
   if (!driveFolder) {
     throw new Error(
-      'Google Drive folder not found. Make sure Google Drive desktop app is installed and signed in.'
+      'Default sync folder not found. Run "granola-sync setup" to configure a sync location.'
     );
   }
 
@@ -91,7 +91,7 @@ export function generateMeetingHash(document: Meeting): string {
 }
 
 export async function syncMeetings(outputDir?: string): Promise<void> {
-  logger.info('Starting Granola to Google Drive sync...');
+  logger.info('Starting Granola transcript sync...');
 
   ensureConfigDir();
   const state = loadSyncState();

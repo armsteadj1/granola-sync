@@ -7,13 +7,18 @@ import {
   registerDaemon,
   registerDoctor,
 } from './cli';
+import { checkForUpdates } from './version-check';
 
+const VERSION = '0.2.4';
 const program = new Command();
 
 program
   .name('granola-sync')
-  .description('Sync Granola meeting transcripts to Google Drive')
-  .version('0.2.3');
+  .description('Sync Granola meeting transcripts to a configured folder')
+  .version(VERSION);
+
+// Check for updates (non-blocking)
+checkForUpdates(VERSION);
 
 registerSetup(program);
 registerSync(program);

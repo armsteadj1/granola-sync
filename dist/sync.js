@@ -103,10 +103,10 @@ function getOutputFolder(outputDir) {
             throw new Error(error);
         return expanded;
     }
-    // Fall back to Google Drive
+    // Fall back to default location (Google Drive)
     const driveFolder = findGoogleDriveFolder();
     if (!driveFolder) {
-        throw new Error('Google Drive folder not found. Make sure Google Drive desktop app is installed and signed in.');
+        throw new Error('Default sync folder not found. Run "granola-sync setup" to configure a sync location.');
     }
     const outputFolder = path.join(driveFolder, paths_1.DRIVE_FOLDER_NAME);
     fs.mkdirSync(outputFolder, { recursive: true });
@@ -121,7 +121,7 @@ function generateMeetingHash(document) {
     return crypto.createHash('sha256').update(`${title}${created}`).digest('hex').slice(0, 16);
 }
 async function syncMeetings(outputDir) {
-    logger_1.logger.info('Starting Granola to Google Drive sync...');
+    logger_1.logger.info('Starting Granola transcript sync...');
     (0, config_1.ensureConfigDir)();
     const state = (0, config_1.loadSyncState)();
     const uploaded = state.uploaded_meetings;
