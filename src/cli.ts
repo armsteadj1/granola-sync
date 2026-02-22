@@ -61,6 +61,35 @@ function detectSyncLocations(): Array<{ name: string; basePath: string }> {
 async function runInteractiveSetup(): Promise<void> {
   console.log('\n' + chalk.bold('=== Granola Sync Setup ===') + '\n');
 
+  // Check if config already exists with output_dir set
+  const existingConfig = loadConfig();
+  if (existingConfig.output_dir) {
+    console.log(chalk.cyan(`Current output directory: ${existingConfig.output_dir}`));
+    console.log('');
+
+    const onCancelEarly = () => {
+      console.log('\nSetup cancelled.');
+      process.exit(0);
+    };
+
+    const { reconfigure } = await prompts(
+      {
+        type: 'confirm',
+        name: 'reconfigure',
+        message: 'Config already exists. Reconfigure?',
+        initial: false,
+      },
+      { onCancel: onCancelEarly }
+    );
+
+    if (!reconfigure) {
+      console.log('\nKeeping existing configuration.');
+      return;
+    }
+
+    console.log('');
+  }
+
   // Check Granola is installed
   if (!fs.existsSync(GRANOLA_AUTH_PATH)) {
     console.error(chalk.red('ERROR: Granola not found'));
