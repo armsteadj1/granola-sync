@@ -38,34 +38,32 @@ Each meeting becomes a Markdown file like `2024-11-15 - Weekly Standup.md` conta
 
 ## Installation
 
-### Option 1: npx (no install required)
+### Recommended: Global install
+
+Global install gives you the best experience — the `granola-sync` command is always available and you can set up the LaunchAgent daemon for automatic syncing every 30 minutes.
+
+```bash
+npm install -g @armsteadj1/granola-sync
+granola-sync setup
+```
+
+### Quick try: npx
+
+Run a one-off sync without installing anything. Note that `npx` won't persist a global command, so the LaunchAgent daemon won't work — use the global install above for automatic syncing.
 
 ```bash
 npx @armsteadj1/granola-sync sync
 ```
 
-### Option 2: Global npm install
-
-```bash
-npm install -g @armsteadj1/granola-sync
-@armsteadj1/granola-sync sync
-```
-
-### Option 3: Install from source
+### From source
 
 ```bash
 git clone <repo-url>
 cd @armsteadj1/granola-sync
 npm install
 npm run build
-```
-
-Then run via:
-```bash
-node dist/index.js sync
-# or link globally:
-npm link
-@armsteadj1/granola-sync sync
+npm link   # makes granola-sync available globally
+granola-sync setup
 ```
 
 ---
