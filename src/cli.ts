@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
+import * as childProcess from 'child_process';
 import chalk from 'chalk';
 import prompts from 'prompts';
 import { Command } from 'commander';
@@ -159,6 +160,37 @@ async function runInteractiveSetup(): Promise<void> {
 
   console.log('');
 
+  // Ask about daemon installation
+  const { installDaemon } = await prompts(
+    {
+      type: 'confirm',
+      name: 'installDaemon',
+      message: 'Install automatic syncing (runs every 30 minutes)?',
+      initial: true,
+    },
+    { onCancel }
+  );
+
+  if (installDaemon) {
+    console.log('');
+    const scriptPath = path.join(__dirname, '..', 'install_launchagent.sh');
+    if (fs.existsSync(scriptPath)) {
+      try {
+        childProcess.execSync(`bash "${scriptPath}"`, { stdio: 'inherit' });
+        console.log('');
+        console.log(chalk.green('✓') + ' Automatic syncing installed (runs every 30 minutes)');
+      } catch {
+        console.error(chalk.red('✗') + ' Failed to install LaunchAgent');
+        console.error(`  Run manually: bash "${scriptPath}"`);
+      }
+    } else {
+      console.log(chalk.yellow('!') + ' install_launchagent.sh not found — skipping daemon install');
+      console.log('  Install manually: ./install_launchagent.sh');
+    }
+  }
+
+  console.log('');
+
   // Ask about first sync
   const { runSync } = await prompts(
     {
@@ -176,7 +208,9 @@ async function runInteractiveSetup(): Promise<void> {
   } else {
     console.log('');
     console.log('To sync manually:          ' + chalk.cyan('granola-sync sync'));
-    console.log('To install auto-sync:      ' + chalk.cyan('./install_launchagent.sh'));
+    if (!installDaemon) {
+      console.log('To install auto-sync:      ' + chalk.cyan('./install_launchagent.sh'));
+    }
     console.log(`Logs: ${LOG_PATH}`);
   }
 }
