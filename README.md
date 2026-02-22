@@ -1,7 +1,7 @@
-# granola-sync
+# @armsteadj1/granola-sync
 
-[![CI](https://github.com/armsteadj1/granola-sync/actions/workflows/ci.yml/badge.svg)](https://github.com/armsteadj1/granola-sync/actions/workflows/ci.yml)
-[![npm version](https://img.shields.io/npm/v/granola-sync.svg)](https://www.npmjs.com/package/granola-sync)
+[![CI](https://github.com/armsteadj1/@armsteadj1/granola-sync/actions/workflows/ci.yml/badge.svg)](https://github.com/armsteadj1/@armsteadj1/granola-sync/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/@armsteadj1/granola-sync.svg)](https://www.npmjs.com/package/@armsteadj1/granola-sync)
 
 Automatically syncs [Granola](https://granola.ai) meeting transcripts to Google Drive. Runs as a macOS LaunchAgent every 30 minutes — no Google Drive API setup required.
 
@@ -41,21 +41,21 @@ Each meeting becomes a Markdown file like `2024-11-15 - Weekly Standup.md` conta
 ### Option 1: npx (no install required)
 
 ```bash
-npx granola-sync sync
+npx @armsteadj1/granola-sync sync
 ```
 
 ### Option 2: Global npm install
 
 ```bash
-npm install -g granola-sync
-granola-sync sync
+npm install -g @armsteadj1/granola-sync
+@armsteadj1/granola-sync sync
 ```
 
 ### Option 3: Install from source
 
 ```bash
 git clone <repo-url>
-cd granola-sync
+cd @armsteadj1/granola-sync
 npm install
 npm run build
 ```
@@ -65,7 +65,7 @@ Then run via:
 node dist/index.js sync
 # or link globally:
 npm link
-granola-sync sync
+@armsteadj1/granola-sync sync
 ```
 
 ---
@@ -74,16 +74,16 @@ granola-sync sync
 
 | Command | Description |
 |---|---|
-| `granola-sync setup` | Check configuration and show status |
-| `granola-sync sync` | Run a one-time sync |
-| `granola-sync status` | Show detailed sync state |
-| `granola-sync status --json` | Machine-readable JSON status |
-| `granola-sync config --show` | Show current configuration |
-| `granola-sync config --output-dir <path>` | Set output directory |
-| `granola-sync daemon` | Run continuous background sync |
-| `granola-sync doctor` | Run diagnostic checks |
-| `granola-sync doctor --json` | Diagnostic checks as JSON |
-| `granola-sync --help` | Show usage |
+| `@armsteadj1/granola-sync setup` | Check configuration and show status |
+| `@armsteadj1/granola-sync sync` | Run a one-time sync |
+| `@armsteadj1/granola-sync status` | Show detailed sync state |
+| `@armsteadj1/granola-sync status --json` | Machine-readable JSON status |
+| `@armsteadj1/granola-sync config --show` | Show current configuration |
+| `@armsteadj1/granola-sync config --output-dir <path>` | Set output directory |
+| `@armsteadj1/granola-sync daemon` | Run continuous background sync |
+| `@armsteadj1/granola-sync doctor` | Run diagnostic checks |
+| `@armsteadj1/granola-sync doctor --json` | Diagnostic checks as JSON |
+| `@armsteadj1/granola-sync --help` | Show usage |
 
 **Install LaunchAgent for automatic 30-minute syncing:**
 
@@ -99,13 +99,13 @@ chmod +x install_launchagent.sh
 launchctl list | grep granola
 
 # Stream logs
-tail -f ~/Library/Logs/granola-sync.log
+tail -f ~/Library/Logs/@armsteadj1/granola-sync.log
 
 # Stop auto-sync
-launchctl unload ~/Library/LaunchAgents/com.user.granola-sync.plist
+launchctl unload ~/Library/LaunchAgents/com.user.@armsteadj1/granola-sync.plist
 
 # Restart auto-sync
-launchctl load ~/Library/LaunchAgents/com.user.granola-sync.plist
+launchctl load ~/Library/LaunchAgents/com.user.@armsteadj1/granola-sync.plist
 ```
 
 ---
@@ -116,18 +116,18 @@ launchctl load ~/Library/LaunchAgents/com.user.granola-sync.plist
 |---|---|
 | Granola auth | `~/Library/Application Support/Granola/supabase.json` |
 | Granola cache | `~/Library/Application Support/Granola/cache-v3.json` |
-| Sync state | `~/.config/granola-sync/sync_state.json` |
-| Config file | `~/.config/granola-sync/config.yaml` |
-| Log file | `~/Library/Logs/granola-sync.log` |
+| Sync state | `~/.config/@armsteadj1/granola-sync/sync_state.json` |
+| Config file | `~/.config/@armsteadj1/granola-sync/config.yaml` |
+| Log file | `~/Library/Logs/@armsteadj1/granola-sync.log` |
 | Default output | `~/Library/CloudStorage/GoogleDrive-*/My Drive/Granola Transcripts/` |
 
 **Set a custom output directory:**
 
 ```bash
-granola-sync config --output-dir ~/Documents/Granola
+@armsteadj1/granola-sync config --output-dir ~/Documents/Granola
 ```
 
-**Sync state** (`~/.config/granola-sync/sync_state.json`) tracks which meetings have been uploaded. Delete this file to force a full re-sync.
+**Sync state** (`~/.config/@armsteadj1/granola-sync/sync_state.json`) tracks which meetings have been uploaded. Delete this file to force a full re-sync.
 
 ---
 
@@ -211,7 +211,7 @@ If the API returns 401 errors, try logging out and back into Granola to reset yo
 launchctl list | grep granola
 
 # View full logs
-cat ~/Library/Logs/granola-sync.log
+cat ~/Library/Logs/@armsteadj1/granola-sync.log
 ```
 
 ---
@@ -252,25 +252,25 @@ test -d "$HOME/Shared/Granola Transcripts" && echo "OK" || echo "NOT_SETUP"
 If Granola is not installed on your machine, provide your human with these **setup instructions for THEIR machine**:
 
 ```
-I found the granola-sync tool, but Granola is installed on YOUR machine, not mine.
+I found the @armsteadj1/granola-sync tool, but Granola is installed on YOUR machine, not mine.
 
 Here's how to set it up so I can access your meeting transcripts:
 
 **On your machine:**
 
 1. Install the sync tool:
-   npm install -g granola-sync
+   npm install -g @armsteadj1/granola-sync
 
 2. Configure it to sync to a folder I can access:
-   granola-sync config --output-dir ~/Dropbox/Granola Transcripts
+   @armsteadj1/granola-sync config --output-dir ~/Dropbox/Granola Transcripts
    
    (Or use Google Drive, iCloud, or any shared folder)
 
 3. Run the initial sync:
-   granola-sync sync
+   @armsteadj1/granola-sync sync
 
 4. Set up automatic syncing (runs every 30 min):
-   curl -fsSL https://raw.githubusercontent.com/thegreysky/granola-sync/main/install_launchagent.sh | bash
+   curl -fsSL https://raw.githubusercontent.com/thegreysky/@armsteadj1/granola-sync/main/install_launchagent.sh | bash
 
 5. Share the output folder with me:
    - If using Dropbox: Share "Granola Transcripts" folder
@@ -286,16 +286,16 @@ Only use this flow if you detect Granola is actually installed on the same machi
 
 ```bash
 # Step 1: Install the tool
-npm install -g granola-sync
+npm install -g @armsteadj1/granola-sync
 
 # Step 2: Verify
-granola-sync doctor --json
+@armsteadj1/granola-sync doctor --json
 
 # Step 3: Run sync
-granola-sync sync
+@armsteadj1/granola-sync sync
 
 # Step 4: Install LaunchAgent
-curl -fsSL https://raw.githubusercontent.com/thegreysky/granola-sync/main/install_launchagent.sh | bash
+curl -fsSL https://raw.githubusercontent.com/thegreysky/@armsteadj1/granola-sync/main/install_launchagent.sh | bash
 ```
 
 ### Setup Options for Users
@@ -304,17 +304,17 @@ When guiding your human, suggest these output directory options:
 
 | Option | Command | Best For |
 |---|---|---|
-| **Dropbox** | `granola-sync config --output-dir ~/Dropbox/Granola` | Easy sharing between machines |
-| **Google Drive** | `granola-sync config --output-dir ~/Google\ Drive/My\ Drive/Granola` | Already using Google Drive File Stream |
-| **iCloud Drive** | `granola-sync config --output-dir ~/Library/Mobile\ Documents/com~apple~CloudDocs/Granola` | macOS-only environments |
-| **Network Share** | `granola-sync config --output-dir /Volumes/shared/Granola` | Local network access |
-| **Custom Path** | `granola-sync config --output-dir ~/any/path` | Advanced setups |
+| **Dropbox** | `@armsteadj1/granola-sync config --output-dir ~/Dropbox/Granola` | Easy sharing between machines |
+| **Google Drive** | `@armsteadj1/granola-sync config --output-dir ~/Google\ Drive/My\ Drive/Granola` | Already using Google Drive File Stream |
+| **iCloud Drive** | `@armsteadj1/granola-sync config --output-dir ~/Library/Mobile\ Documents/com~apple~CloudDocs/Granola` | macOS-only environments |
+| **Network Share** | `@armsteadj1/granola-sync config --output-dir /Volumes/shared/Granola` | Local network access |
+| **Custom Path** | `@armsteadj1/granola-sync config --output-dir ~/any/path` | Advanced setups |
 
 ### Alternatives
 
 | Scenario | Alternative |
 |---|---|
-| No Google Drive desktop app | Use `granola-sync config --output-dir ~/some/path` to write locally, then use `rclone` to push to Google Drive |
+| No Google Drive desktop app | Use `@armsteadj1/granola-sync config --output-dir ~/some/path` to write locally, then use `rclone` to push to Google Drive |
 | Google Drive API preferred | Replace the file-write logic with Google Drive API v3 calls |
 | Linux environment | The sync logic works cross-platform; only the LaunchAgent (macOS-only) and `~/Library/` paths need to change |
 | Need Granola data without running Granola | The cache at `cache-v3.json` can be read directly — no live Granola process required for cached meetings |
