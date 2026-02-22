@@ -45,6 +45,7 @@ exports.registerDoctor = registerDoctor;
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const yaml = __importStar(require("js-yaml"));
+const childProcess = __importStar(require("child_process"));
 const chalk_1 = __importDefault(require("chalk"));
 const prompts_1 = __importDefault(require("prompts"));
 const paths_1 = require("./paths");
@@ -158,6 +159,33 @@ async function runInteractiveSetup() {
         console.log(`  Already synced: ${uploadedCount} meetings`);
     }
     console.log('');
+    // Ask about daemon installation
+    const { installDaemon } = await (0, prompts_1.default)({
+        type: 'confirm',
+        name: 'installDaemon',
+        message: 'Install automatic syncing (runs every 30 minutes)?',
+        initial: true,
+    }, { onCancel });
+    if (installDaemon) {
+        console.log('');
+        const scriptPath = path.join(__dirname, '..', 'install_launchagent.sh');
+        if (fs.existsSync(scriptPath)) {
+            try {
+                childProcess.execSync(`bash "${scriptPath}"`, { stdio: 'inherit' });
+                console.log('');
+                console.log(chalk_1.default.green('✓') + ' Automatic syncing installed (runs every 30 minutes)');
+            }
+            catch {
+                console.error(chalk_1.default.red('✗') + ' Failed to install LaunchAgent');
+                console.error(`  Run manually: bash "${scriptPath}"`);
+            }
+        }
+        else {
+            console.log(chalk_1.default.yellow('!') + ' install_launchagent.sh not found — skipping daemon install');
+            console.log('  Install manually: ./install_launchagent.sh');
+        }
+    }
+    console.log('');
     // Ask about first sync
     const { runSync } = await (0, prompts_1.default)({
         type: 'confirm',
@@ -172,7 +200,9 @@ async function runInteractiveSetup() {
     else {
         console.log('');
         console.log('To sync manually:          ' + chalk_1.default.cyan('granola-sync sync'));
-        console.log('To install auto-sync:      ' + chalk_1.default.cyan('./install_launchagent.sh'));
+        if (!installDaemon) {
+            console.log('To install auto-sync:      ' + chalk_1.default.cyan('./install_launchagent.sh'));
+        }
         console.log(`Logs: ${paths_1.LOG_PATH}`);
     }
 }
