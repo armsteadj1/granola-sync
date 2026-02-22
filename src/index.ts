@@ -13,7 +13,7 @@ const program = new Command();
 program
   .name('granola-sync')
   .description('Sync Granola meeting transcripts to Google Drive')
-  .version('0.2.0');
+  .version('0.2.2');
 
 registerSetup(program);
 registerSync(program);
