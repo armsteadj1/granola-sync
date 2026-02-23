@@ -1,6 +1,6 @@
 # @armsteadj1/granola-sync
 
-[![CI](https://github.com/armsteadj1/@armsteadj1/granola-sync/actions/workflows/ci.yml/badge.svg)](https://github.com/armsteadj1/@armsteadj1/granola-sync/actions/workflows/ci.yml)
+[![CI](https://github.com/armsteadj1/granola-sync/actions/workflows/ci.yml/badge.svg)](https://github.com/armsteadj1/granola-sync/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/@armsteadj1/granola-sync.svg)](https://www.npmjs.com/package/@armsteadj1/granola-sync)
 
 Automatically syncs [Granola](https://granola.ai) meeting transcripts to Google Drive. Runs as a macOS LaunchAgent every 30 minutes — no Google Drive API setup required.
