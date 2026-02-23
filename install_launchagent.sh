@@ -1,44 +1,55 @@
 #!/bin/bash
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLIST_NAME="com.user.granola-sync.plist"
 LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
+SUPPORT_DIR="$HOME/Library/Application Support/granola-sync"
+LAUNCHER_PATH="$SUPPORT_DIR/launcher.sh"
 
 echo "=== Installing Granola Sync LaunchAgent ==="
 echo ""
 
-# Find the granola-sync binary
-BINARY=""
-
-# Check if globally installed via npm
-if command -v granola-sync &>/dev/null; then
-    BINARY="$(command -v granola-sync)"
-elif [ -f "$SCRIPT_DIR/dist/index.js" ] && command -v node &>/dev/null; then
-    # Use node to run the local build
-    BINARY="$(command -v node)"
-    BINARY_ARG="$SCRIPT_DIR/dist/index.js"
-else
+# Verify granola-sync is installed
+if ! command -v granola-sync &>/dev/null; then
     echo "ERROR: granola-sync binary not found."
-    echo "Install it first with: npm install -g granola-drive-sync"
-    echo "Or build from source: npm install && npm run build"
+    echo "Install it first with: npm install -g @armsteadj1/granola-sync"
     exit 1
 fi
 
+echo "Found granola-sync at: $(command -v granola-sync)"
+
+# Create support dir
+mkdir -p "$SUPPORT_DIR"
+
+# Write wrapper script that loads node version managers before running.
+# This means node upgrades (nvm, fnm, volta) never break the daemon.
+cat > "$LAUNCHER_PATH" << 'LAUNCHER_EOF'
+#!/bin/bash
+# Granola Sync Launcher
+# Loads node version managers so the daemon works regardless of node version or upgrades.
+
+# nvm
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh"
+
+# fnm
+if command -v fnm &>/dev/null; then
+  eval "$(fnm env)"
+fi
+
+# volta
+export VOLTA_HOME="$HOME/.volta"
+export PATH="$VOLTA_HOME/bin:$PATH"
+
+exec granola-sync sync
+LAUNCHER_EOF
+
+chmod +x "$LAUNCHER_PATH"
+echo "Created launcher at: $LAUNCHER_PATH"
+
 # Create LaunchAgents directory if needed
 mkdir -p "$LAUNCH_AGENTS_DIR"
-
 PLIST_PATH="$LAUNCH_AGENTS_DIR/$PLIST_NAME"
-
-# Build ProgramArguments based on whether we have a direct binary or node + script
-if [ -n "$BINARY_ARG" ]; then
-    PROGRAM_ARGS="        <string>$BINARY</string>
-        <string>$BINARY_ARG</string>
-        <string>sync</string>"
-else
-    PROGRAM_ARGS="        <string>$BINARY</string>
-        <string>sync</string>"
-fi
 
 cat > "$PLIST_PATH" << EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -50,7 +61,8 @@ cat > "$PLIST_PATH" << EOF
 
     <key>ProgramArguments</key>
     <array>
-$PROGRAM_ARGS
+        <string>/bin/bash</string>
+        <string>$LAUNCHER_PATH</string>
     </array>
 
     <key>StartInterval</key>
@@ -64,12 +76,6 @@ $PROGRAM_ARGS
 
     <key>StandardErrorPath</key>
     <string>$HOME/Library/Logs/granola-sync.log</string>
-
-    <key>EnvironmentVariables</key>
-    <dict>
-        <key>PATH</key>
-        <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
-    </dict>
 </dict>
 </plist>
 EOF
@@ -95,6 +101,7 @@ echo "  - Every 30 minutes"
 echo ""
 echo "To check status:"
 echo "  launchctl list | grep granola"
+echo "  granola-sync status"
 echo ""
 echo "To view logs:"
 echo "  tail -f ~/Library/Logs/granola-sync.log"
