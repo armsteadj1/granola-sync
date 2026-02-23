@@ -30,43 +30,19 @@ function writeCache(cache) {
         // Ignore cache errors
     }
 }
-async function fetchLatestVersion() {
+async function fetchAndCacheLatestVersion() {
     try {
         const response = await axios_1.default.get(`https://registry.npmjs.org/${PACKAGE_NAME}/latest`, {
-            timeout: 2000, // 2 second timeout
+            timeout: 3000,
         });
-        return response.data.version;
+        const latestVersion = response.data.version;
+        if (latestVersion) {
+            writeCache({ lastCheck: Date.now(), latestVersion });
+        }
     }
     catch (error) {
-        return null;
+        // Silent fail — don't interrupt user experience
     }
-}
-async function checkForUpdates(currentVersion) {
-    // Non-blocking - run in background
-    setImmediate(async () => {
-        try {
-            const cache = readCache();
-            const now = Date.now();
-            // Check cache first
-            if (cache && now - cache.lastCheck < CHECK_INTERVAL) {
-                if (cache.latestVersion && cache.latestVersion !== currentVersion) {
-                    showUpdateMessage(currentVersion, cache.latestVersion);
-                }
-                return;
-            }
-            // Fetch latest version
-            const latestVersion = await fetchLatestVersion();
-            if (latestVersion) {
-                writeCache({ lastCheck: now, latestVersion });
-                if (latestVersion !== currentVersion) {
-                    showUpdateMessage(currentVersion, latestVersion);
-                }
-            }
-        }
-        catch (error) {
-            // Silent fail - don't interrupt user experience
-        }
-    });
 }
 function showUpdateMessage(currentVersion, latestVersion) {
     console.log('');
@@ -76,4 +52,16 @@ function showUpdateMessage(currentVersion, latestVersion) {
     console.log(chalk_1.default.yellow('│') + '  Run: ' + chalk_1.default.cyan('npm install -g @armsteadj1/granola-sync') + '      ' + chalk_1.default.yellow('│'));
     console.log(chalk_1.default.yellow('└─────────────────────────────────────────────────────────┘'));
     console.log('');
+}
+function checkForUpdates(currentVersion) {
+    // 1. Check cache synchronously — show banner immediately if update is known
+    const cache = readCache();
+    if (cache && cache.latestVersion && cache.latestVersion !== currentVersion) {
+        showUpdateMessage(currentVersion, cache.latestVersion);
+    }
+    // 2. Refresh cache in background if stale (>24h) — result shows on NEXT run
+    const now = Date.now();
+    if (!cache || now - cache.lastCheck >= CHECK_INTERVAL) {
+        setImmediate(() => { fetchAndCacheLatestVersion(); });
+    }
 }

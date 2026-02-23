@@ -31,46 +31,18 @@ function writeCache(cache: VersionCache): void {
   }
 }
 
-async function fetchLatestVersion(): Promise<string | null> {
+async function fetchAndCacheLatestVersion(): Promise<void> {
   try {
     const response = await axios.get(`https://registry.npmjs.org/${PACKAGE_NAME}/latest`, {
-      timeout: 2000, // 2 second timeout
+      timeout: 3000,
     });
-    return response.data.version;
-  } catch (error) {
-    return null;
-  }
-}
-
-export async function checkForUpdates(currentVersion: string): Promise<void> {
-  // Non-blocking - run in background
-  setImmediate(async () => {
-    try {
-      const cache = readCache();
-      const now = Date.now();
-
-      // Check cache first
-      if (cache && now - cache.lastCheck < CHECK_INTERVAL) {
-        if (cache.latestVersion && cache.latestVersion !== currentVersion) {
-          showUpdateMessage(currentVersion, cache.latestVersion);
-        }
-        return;
-      }
-
-      // Fetch latest version
-      const latestVersion = await fetchLatestVersion();
-
-      if (latestVersion) {
-        writeCache({ lastCheck: now, latestVersion });
-
-        if (latestVersion !== currentVersion) {
-          showUpdateMessage(currentVersion, latestVersion);
-        }
-      }
-    } catch (error) {
-      // Silent fail - don't interrupt user experience
+    const latestVersion = response.data.version;
+    if (latestVersion) {
+      writeCache({ lastCheck: Date.now(), latestVersion });
     }
-  });
+  } catch (error) {
+    // Silent fail — don't interrupt user experience
+  }
 }
 
 function showUpdateMessage(currentVersion: string, latestVersion: string): void {
@@ -81,4 +53,18 @@ function showUpdateMessage(currentVersion: string, latestVersion: string): void 
   console.log(chalk.yellow('│') + '  Run: ' + chalk.cyan('npm install -g @armsteadj1/granola-sync') + '      ' + chalk.yellow('│'));
   console.log(chalk.yellow('└─────────────────────────────────────────────────────────┘'));
   console.log('');
+}
+
+export function checkForUpdates(currentVersion: string): void {
+  // 1. Check cache synchronously — show banner immediately if update is known
+  const cache = readCache();
+  if (cache && cache.latestVersion && cache.latestVersion !== currentVersion) {
+    showUpdateMessage(currentVersion, cache.latestVersion);
+  }
+
+  // 2. Refresh cache in background if stale (>24h) — result shows on NEXT run
+  const now = Date.now();
+  if (!cache || now - cache.lastCheck >= CHECK_INTERVAL) {
+    setImmediate(() => { fetchAndCacheLatestVersion(); });
+  }
 }
