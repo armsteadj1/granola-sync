@@ -4,7 +4,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const commander_1 = require("commander");
 const cli_1 = require("./cli");
 const version_check_1 = require("./version-check");
-const VERSION = '0.2.7';
+const VERSION = '0.2.8';
 const program = new commander_1.Command();
 program
     .name('granola-sync')

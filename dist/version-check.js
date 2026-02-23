@@ -53,10 +53,22 @@ function showUpdateMessage(currentVersion, latestVersion) {
     console.log(chalk_1.default.yellow('└─────────────────────────────────────────────────────────┘'));
     console.log('');
 }
+function isNewer(a, b) {
+    // Returns true if version a is strictly newer than version b
+    const pa = a.split('.').map(Number);
+    const pb = b.split('.').map(Number);
+    for (let i = 0; i < 3; i++) {
+        if ((pa[i] || 0) > (pb[i] || 0))
+            return true;
+        if ((pa[i] || 0) < (pb[i] || 0))
+            return false;
+    }
+    return false;
+}
 function checkForUpdates(currentVersion) {
     // 1. Check cache synchronously — show banner immediately if update is known
     const cache = readCache();
-    if (cache && cache.latestVersion && cache.latestVersion !== currentVersion) {
+    if (cache && cache.latestVersion && isNewer(cache.latestVersion, currentVersion)) {
         showUpdateMessage(currentVersion, cache.latestVersion);
     }
     // 2. Refresh cache in background if stale (>24h) — result shows on NEXT run

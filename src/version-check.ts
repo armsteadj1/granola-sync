@@ -55,10 +55,21 @@ function showUpdateMessage(currentVersion: string, latestVersion: string): void 
   console.log('');
 }
 
+function isNewer(a: string, b: string): boolean {
+  // Returns true if version a is strictly newer than version b
+  const pa = a.split('.').map(Number);
+  const pb = b.split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] || 0) > (pb[i] || 0)) return true;
+    if ((pa[i] || 0) < (pb[i] || 0)) return false;
+  }
+  return false;
+}
+
 export function checkForUpdates(currentVersion: string): void {
   // 1. Check cache synchronously — show banner immediately if update is known
   const cache = readCache();
-  if (cache && cache.latestVersion && cache.latestVersion !== currentVersion) {
+  if (cache && cache.latestVersion && isNewer(cache.latestVersion, currentVersion)) {
     showUpdateMessage(currentVersion, cache.latestVersion);
   }
 
