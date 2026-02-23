@@ -17,3 +17,5 @@ export const WORKOS_AUTH_URL = 'https://api.workos.com/user_management/authentic
 export const WORKOS_CLIENT_ID = 'client_01JZJ0XBDAT8PHJWQY09Y0VD61';
 export const LAUNCHAGENT_LABEL = 'com.user.granola-sync';
 export const LAUNCHAGENT_PLIST = path.join(HOME, 'Library', 'LaunchAgents', `${LAUNCHAGENT_LABEL}.plist`);
+export const DAEMON_SUPPORT_DIR = path.join(HOME, 'Library', 'Application Support', 'granola-sync');
+export const DAEMON_LAUNCHER = path.join(DAEMON_SUPPORT_DIR, 'launcher.sh');

@@ -13,6 +13,10 @@ import {
   CONFIG_PATH,
   LOG_PATH,
   DRIVE_FOLDER_NAME,
+  LAUNCHAGENT_LABEL,
+  LAUNCHAGENT_PLIST,
+  DAEMON_SUPPORT_DIR,
+  DAEMON_LAUNCHER,
 } from './paths';
 import { ensureConfigDir, loadConfig, saveConfig, loadSyncState } from './config';
 import { validateWritable, findGoogleDriveFolder, getOutputFolder, syncMeetings } from './sync';
@@ -202,19 +206,11 @@ async function runInteractiveSetup(): Promise<void> {
 
   if (installDaemon) {
     console.log('');
-    const scriptPath = path.join(__dirname, '..', 'install_launchagent.sh');
-    if (fs.existsSync(scriptPath)) {
-      try {
-        childProcess.execSync(`bash "${scriptPath}"`, { stdio: 'inherit' });
-        console.log('');
-        console.log(chalk.green('✓') + ' Automatic syncing installed (runs every 30 minutes)');
-      } catch {
-        console.error(chalk.red('✗') + ' Failed to install LaunchAgent');
-        console.error(`  Run manually: bash "${scriptPath}"`);
-      }
-    } else {
-      console.log(chalk.yellow('!') + ' install_launchagent.sh not found — skipping daemon install');
-      console.log('  Install manually: ./install_launchagent.sh');
+    try {
+      daemonInstall();
+    } catch {
+      console.error(chalk.red('✗') + ' Failed to install daemon');
+      console.error('  Run manually: granola-sync daemon install');
     }
   }
 
@@ -606,10 +602,208 @@ export function registerConfig(program: Command): void {
 
 // ─── daemon ──────────────────────────────────────────────────────────────────
 
+function buildLauncherScript(): string {
+  return `#!/bin/bash
+# Granola Sync Launcher
+# Loads node version managers so the daemon works regardless of node version or upgrades.
+
+# nvm
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh"
+
+# fnm
+if command -v fnm &>/dev/null; then
+  eval "$(fnm env)"
+fi
+
+# volta
+export VOLTA_HOME="$HOME/.volta"
+export PATH="$VOLTA_HOME/bin:$PATH"
+
+exec granola-sync sync
+`;
+}
+
+function buildPlist(launcherPath: string, logPath: string): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>${LAUNCHAGENT_LABEL}</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>${launcherPath}</string>
+    </array>
+
+    <key>StartInterval</key>
+    <integer>1800</integer>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>${logPath}</string>
+
+    <key>StandardErrorPath</key>
+    <string>${logPath}</string>
+</dict>
+</plist>
+`;
+}
+
+function daemonInstall(): void {
+  console.log('\n' + chalk.bold('Installing Granola Sync daemon...') + '\n');
+
+  // Verify granola-sync is available
+  try {
+    childProcess.execSync('which granola-sync', { stdio: 'pipe' });
+  } catch {
+    console.error(chalk.red('ERROR: granola-sync not found in PATH.'));
+    console.error('Install it first: npm install -g @armsteadj1/granola-sync');
+    process.exit(1);
+  }
+
+  // Create support dir and write launcher
+  fs.mkdirSync(DAEMON_SUPPORT_DIR, { recursive: true });
+  fs.writeFileSync(DAEMON_LAUNCHER, buildLauncherScript(), { mode: 0o755 });
+  console.log(chalk.green('✓') + ` Launcher: ${DAEMON_LAUNCHER}`);
+
+  // Write plist
+  fs.mkdirSync(path.dirname(LAUNCHAGENT_PLIST), { recursive: true });
+  fs.writeFileSync(LAUNCHAGENT_PLIST, buildPlist(DAEMON_LAUNCHER, LOG_PATH));
+  console.log(chalk.green('✓') + ` Plist: ${LAUNCHAGENT_PLIST}`);
+
+  // Unload existing if loaded
+  try {
+    const list = childProcess.execSync('launchctl list', { stdio: 'pipe' }).toString();
+    if (list.includes(LAUNCHAGENT_LABEL)) {
+      childProcess.execSync(`launchctl unload "${LAUNCHAGENT_PLIST}"`, { stdio: 'pipe' });
+    }
+  } catch { /* ignore */ }
+
+  // Load
+  try {
+    childProcess.execSync(`launchctl load "${LAUNCHAGENT_PLIST}"`, { stdio: 'pipe' });
+    console.log(chalk.green('✓') + ' LaunchAgent loaded — syncing every 30 minutes\n');
+  } catch (err) {
+    console.error(chalk.red('ERROR: Failed to load LaunchAgent.'));
+    console.error(`  Try: launchctl load "${LAUNCHAGENT_PLIST}"`);
+    process.exit(1);
+  }
+
+  console.log(`Logs: ${chalk.cyan(`tail -f ${LOG_PATH}`)}`);
+  console.log(`Check status: ${chalk.cyan('granola-sync daemon status')}\n`);
+}
+
+function daemonUninstall(): void {
+  let unloaded = false;
+  try {
+    const list = childProcess.execSync('launchctl list', { stdio: 'pipe' }).toString();
+    if (list.includes(LAUNCHAGENT_LABEL)) {
+      childProcess.execSync(`launchctl unload "${LAUNCHAGENT_PLIST}"`, { stdio: 'pipe' });
+      unloaded = true;
+    }
+  } catch { /* ignore */ }
+
+  if (fs.existsSync(LAUNCHAGENT_PLIST)) {
+    fs.unlinkSync(LAUNCHAGENT_PLIST);
+    console.log(chalk.green('✓') + ' Plist removed');
+  }
+  if (fs.existsSync(DAEMON_LAUNCHER)) {
+    fs.unlinkSync(DAEMON_LAUNCHER);
+    console.log(chalk.green('✓') + ' Launcher removed');
+  }
+
+  if (unloaded || fs.existsSync(LAUNCHAGENT_PLIST)) {
+    console.log(chalk.green('✓') + ' Daemon uninstalled');
+  } else {
+    console.log(chalk.yellow('Daemon was not installed.'));
+  }
+}
+
 export function registerDaemon(program: Command): void {
-  program
+  const daemon = program
     .command('daemon')
-    .description('Run continuously, syncing on a fixed interval')
+    .description('Manage the background sync daemon (LaunchAgent)');
+
+  daemon
+    .command('install')
+    .description('Install (or reinstall) the LaunchAgent for automatic syncing every 30 minutes')
+    .action(() => { daemonInstall(); });
+
+  daemon
+    .command('uninstall')
+    .description('Remove the LaunchAgent and stop automatic syncing')
+    .action(() => { daemonUninstall(); });
+
+  daemon
+    .command('start')
+    .description('Load (start) the LaunchAgent')
+    .action(() => {
+      if (!fs.existsSync(LAUNCHAGENT_PLIST)) {
+        console.error(chalk.red('Daemon not installed. Run: granola-sync daemon install'));
+        process.exit(1);
+      }
+      try {
+        childProcess.execSync(`launchctl load "${LAUNCHAGENT_PLIST}"`, { stdio: 'inherit' });
+        console.log(chalk.green('✓') + ' Daemon started');
+      } catch {
+        console.error(chalk.red('Failed to start daemon.'));
+        process.exit(1);
+      }
+    });
+
+  daemon
+    .command('stop')
+    .description('Unload (stop) the LaunchAgent')
+    .action(() => {
+      if (!fs.existsSync(LAUNCHAGENT_PLIST)) {
+        console.error(chalk.red('Daemon not installed.'));
+        process.exit(1);
+      }
+      try {
+        childProcess.execSync(`launchctl unload "${LAUNCHAGENT_PLIST}"`, { stdio: 'inherit' });
+        console.log(chalk.green('✓') + ' Daemon stopped');
+      } catch {
+        console.error(chalk.red('Failed to stop daemon.'));
+        process.exit(1);
+      }
+    });
+
+  daemon
+    .command('status')
+    .description('Show whether the daemon is installed and running')
+    .action(() => {
+      const info = checkDaemonStatus();
+      if (!info.installed) {
+        console.log(chalk.yellow('Not installed') + ' — run: granola-sync daemon install');
+        return;
+      }
+      if (info.running) {
+        const pidStr = info.pid ? ` (PID ${info.pid})` : '';
+        console.log(chalk.green('Running') + pidStr);
+      } else {
+        console.log(chalk.yellow('Installed but not running') + ' — run: granola-sync daemon start');
+      }
+    });
+
+  daemon
+    .command('logs')
+    .description('Tail the sync log')
+    .action(() => {
+      if (!fs.existsSync(LOG_PATH)) {
+        console.log(chalk.yellow('No log file yet.') + ` Expected: ${LOG_PATH}`);
+        return;
+      }
+      childProcess.spawn('tail', ['-f', LOG_PATH], { stdio: 'inherit' });
+    });
+
+  daemon
+    .command('run')
+    .description('Run the sync loop in the foreground (for debugging)')
     .option('--interval <seconds>', 'Seconds between sync runs', '1800')
     .option('-o, --output-dir <path>', 'Output directory for synced files (overrides config)')
     .action(async (opts: { interval?: string; outputDir?: string }) => {
@@ -617,17 +811,14 @@ export function registerDaemon(program: Command): void {
       const out = opts.outputDir ? expandUser(opts.outputDir) : undefined;
       console.log(`Starting daemon — syncing every ${interval}s. Press Ctrl+C to stop.`);
       console.log(`Log file: ${LOG_PATH}`);
-
       const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
       try {
         while (true) {
           await syncMeetings(out);
           console.log(`Next sync in ${interval}s...`);
           await sleep(interval * 1000);
         }
-      } catch (err) {
-        // SIGINT / Ctrl+C
+      } catch {
         console.log('\nDaemon stopped.');
       }
     });

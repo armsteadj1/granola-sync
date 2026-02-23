@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.LAUNCHAGENT_PLIST = exports.LAUNCHAGENT_LABEL = exports.WORKOS_CLIENT_ID = exports.WORKOS_AUTH_URL = exports.GRANOLA_API_BASE = exports.DRIVE_FOLDER_NAME = exports.GOOGLE_DRIVE_BASE = exports.LOG_PATH = exports.CONFIG_PATH_LEGACY = exports.CONFIG_PATH = exports.SYNC_STATE_PATH = exports.CONFIG_DIR = exports.GRANOLA_CACHE_PATH = exports.GRANOLA_AUTH_PATH = exports.HOME = void 0;
+exports.DAEMON_LAUNCHER = exports.DAEMON_SUPPORT_DIR = exports.LAUNCHAGENT_PLIST = exports.LAUNCHAGENT_LABEL = exports.WORKOS_CLIENT_ID = exports.WORKOS_AUTH_URL = exports.GRANOLA_API_BASE = exports.DRIVE_FOLDER_NAME = exports.GOOGLE_DRIVE_BASE = exports.LOG_PATH = exports.CONFIG_PATH_LEGACY = exports.CONFIG_PATH = exports.SYNC_STATE_PATH = exports.CONFIG_DIR = exports.GRANOLA_CACHE_PATH = exports.GRANOLA_AUTH_PATH = exports.HOME = void 0;
 const os = __importStar(require("os"));
 const path = __importStar(require("path"));
 exports.HOME = os.homedir();
@@ -51,3 +51,5 @@ exports.WORKOS_AUTH_URL = 'https://api.workos.com/user_management/authenticate';
 exports.WORKOS_CLIENT_ID = 'client_01JZJ0XBDAT8PHJWQY09Y0VD61';
 exports.LAUNCHAGENT_LABEL = 'com.user.granola-sync';
 exports.LAUNCHAGENT_PLIST = path.join(exports.HOME, 'Library', 'LaunchAgents', `${exports.LAUNCHAGENT_LABEL}.plist`);
+exports.DAEMON_SUPPORT_DIR = path.join(exports.HOME, 'Library', 'Application Support', 'granola-sync');
+exports.DAEMON_LAUNCHER = path.join(exports.DAEMON_SUPPORT_DIR, 'launcher.sh');
