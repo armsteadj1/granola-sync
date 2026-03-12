@@ -136,7 +136,8 @@ async function syncMeetings(outputDir) {
         return;
     }
     // Load meetings from local cache
-    const meetings = (0, cache_1.getMeetingsFromCache)();
+    const config = (0, config_1.loadConfig)();
+    const meetings = (0, cache_1.getMeetingsFromCache)(config.cache_file);
     const meetingCount = Object.keys(meetings).length;
     logger_1.logger.info(`Found ${meetingCount} meetings in local cache`);
     if (meetingCount === 0) {

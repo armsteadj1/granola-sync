@@ -37,12 +37,13 @@ exports.getMeetingsFromCache = getMeetingsFromCache;
 const fs = __importStar(require("fs"));
 const paths_1 = require("./paths");
 const logger_1 = require("./logger");
-function getMeetingsFromCache() {
-    if (!fs.existsSync(paths_1.GRANOLA_CACHE_PATH)) {
+function getMeetingsFromCache(cacheFile) {
+    const cachePath = (0, paths_1.getGranolaCachePath)(cacheFile);
+    if (!fs.existsSync(cachePath)) {
         return {};
     }
     try {
-        const raw = fs.readFileSync(paths_1.GRANOLA_CACHE_PATH, 'utf-8');
+        const raw = fs.readFileSync(cachePath, 'utf-8');
         const data = JSON.parse(raw);
         const cacheStr = data.cache || '{}';
         const cache = JSON.parse(cacheStr);

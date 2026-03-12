@@ -9,7 +9,7 @@ import { Config } from './types';
 import {
   HOME,
   GRANOLA_AUTH_PATH,
-  GRANOLA_CACHE_PATH,
+  getGranolaCachePath,
   CONFIG_PATH,
   LOG_PATH,
   DRIVE_FOLDER_NAME,
@@ -104,8 +104,9 @@ async function runInteractiveSetup(): Promise<void> {
   console.log(chalk.green('✓') + ' Granola detected');
 
   // Check local cache
-  if (fs.existsSync(GRANOLA_CACHE_PATH)) {
-    const meetings = getMeetingsFromCache();
+  const cachePath = getGranolaCachePath(existingConfig.cache_file);
+  if (fs.existsSync(cachePath)) {
+    const meetings = getMeetingsFromCache(existingConfig.cache_file);
     const meetingCount = Object.keys(meetings).length;
     const withContent = Object.values(meetings).filter(
       (m) => (m.transcribe || m.notes_markdown) && !m.deleted_at
@@ -272,8 +273,9 @@ export function registerSetup(program: Command): void {
         console.log('Granola: OK');
 
         // Check local cache
-        if (fs.existsSync(GRANOLA_CACHE_PATH)) {
-          const meetings = getMeetingsFromCache();
+        const setupCachePath = getGranolaCachePath(config.cache_file);
+        if (fs.existsSync(setupCachePath)) {
+          const meetings = getMeetingsFromCache(config.cache_file);
           const meetingCount = Object.keys(meetings).length;
           const withContent = Object.values(meetings).filter(
             (m) => (m.transcribe || m.notes_markdown) && !m.deleted_at
@@ -333,7 +335,8 @@ export function registerStatus(program: Command): void {
       const state = loadSyncState();
       const uploaded = state.uploaded_meetings;
       const lastSyncStr = state.last_sync;
-      const meetings = getMeetingsFromCache();
+      const statusConfig = loadConfig();
+      const meetings = getMeetingsFromCache(statusConfig.cache_file);
 
       // Categorize meetings
       const inProgressMeetings: Array<{ title: string; date: string; reason: string }> = [];
@@ -572,8 +575,9 @@ export function registerConfig(program: Command): void {
     .command('config')
     .description('View or update configuration settings')
     .option('--output-dir <path>', 'Set the output directory for synced files')
+    .option('--cache-file <filename>', 'Set the Granola cache filename (e.g. cache-v6.json)')
     .option('--show', 'Print current configuration')
-    .action((opts: { outputDir?: string; show?: boolean }) => {
+    .action((opts: { outputDir?: string; cacheFile?: string; show?: boolean }) => {
       const config = loadConfig();
 
       if (opts.outputDir) {
@@ -588,7 +592,14 @@ export function registerConfig(program: Command): void {
         console.log(`Output directory set to: ${config.output_dir}`);
       }
 
-      if (opts.show || !opts.outputDir) {
+      if (opts.cacheFile) {
+        config.cache_file = opts.cacheFile;
+        saveConfig(config);
+        const resolvedPath = getGranolaCachePath(opts.cacheFile);
+        console.log(`Cache file set to: ${opts.cacheFile} (${resolvedPath})`);
+      }
+
+      if (opts.show || (!opts.outputDir && !opts.cacheFile)) {
         if (Object.keys(config).length > 0) {
           console.log(`Config file: ${CONFIG_PATH}`);
           process.stdout.write(yaml.dump(config, { noCompatMode: true }));
@@ -844,17 +855,19 @@ export function registerDoctor(program: Command): void {
       };
 
       // Granola cache
-      if (fs.existsSync(GRANOLA_CACHE_PATH)) {
-        const meetings = getMeetingsFromCache();
+      const doctorConfig = loadConfig();
+      const doctorCachePath = getGranolaCachePath(doctorConfig.cache_file);
+      if (fs.existsSync(doctorCachePath)) {
+        const meetings = getMeetingsFromCache(doctorConfig.cache_file);
         checks['granola_cache'] = {
           ok: true,
-          path: GRANOLA_CACHE_PATH,
+          path: doctorCachePath,
           meetings: Object.keys(meetings).length,
         };
       } else {
         checks['granola_cache'] = {
           ok: false,
-          path: GRANOLA_CACHE_PATH,
+          path: doctorCachePath,
           meetings: 0,
         };
       }

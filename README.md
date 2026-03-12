@@ -113,7 +113,7 @@ launchctl load ~/Library/LaunchAgents/com.user.@armsteadj1/granola-sync.plist
 | What | Path |
 |---|---|
 | Granola auth | `~/Library/Application Support/Granola/supabase.json` |
-| Granola cache | `~/Library/Application Support/Granola/cache-v3.json` |
+| Granola cache | `~/Library/Application Support/Granola/cache-v6.json` (auto-detected) |
 | Sync state | `~/.config/@armsteadj1/granola-sync/sync_state.json` |
 | Config file | `~/.config/@armsteadj1/granola-sync/config.yaml` |
 | Log file | `~/Library/Logs/@armsteadj1/granola-sync.log` |
@@ -125,6 +125,14 @@ launchctl load ~/Library/LaunchAgents/com.user.@armsteadj1/granola-sync.plist
 @armsteadj1/granola-sync config --output-dir ~/Documents/Granola
 ```
 
+**Set a custom cache file** (if Granola changes its cache format):
+
+```bash
+@armsteadj1/granola-sync config --cache-file cache-v6.json
+```
+
+By default, the tool auto-detects the highest `cache-vN.json` file in Granola's application support directory. You only need to set this if auto-detection doesn't work for your setup.
+
 **Sync state** (`~/.config/@armsteadj1/granola-sync/sync_state.json`) tracks which meetings have been uploaded. Delete this file to force a full re-sync.
 
 ---
@@ -132,7 +140,7 @@ launchctl load ~/Library/LaunchAgents/com.user.@armsteadj1/granola-sync.plist
 ## How It Works
 
 ```
-Granola local cache (cache-v3.json)
+Granola local cache (auto-detected cache-vN.json)
         │
         ▼
   Load meeting list
@@ -315,7 +323,7 @@ When guiding your human, suggest these output directory options:
 | No Google Drive desktop app | Use `@armsteadj1/granola-sync config --output-dir ~/some/path` to write locally, then use `rclone` to push to Google Drive |
 | Google Drive API preferred | Replace the file-write logic with Google Drive API v3 calls |
 | Linux environment | The sync logic works cross-platform; only the LaunchAgent (macOS-only) and `~/Library/` paths need to change |
-| Need Granola data without running Granola | The cache at `cache-v3.json` can be read directly — no live Granola process required for cached meetings |
+| Need Granola data without running Granola | The cache (e.g. `cache-v6.json`) can be read directly — no live Granola process required for cached meetings |
 | Want to export to Notion/Obsidian/etc. | The Markdown output from `createMeetingMarkdown()` is portable |
 
 ### File Map for Agents
