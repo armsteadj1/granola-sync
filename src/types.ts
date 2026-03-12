@@ -45,6 +45,7 @@ export interface WorkOSTokens {
 
 export interface Config {
   output_dir?: string;
+  cache_file?: string;
   [key: string]: unknown;
 }
 

@@ -108,7 +108,8 @@ export async function syncMeetings(outputDir?: string): Promise<void> {
   }
 
   // Load meetings from local cache
-  const meetings = getMeetingsFromCache();
+  const config = loadConfig();
+  const meetings = getMeetingsFromCache(config.cache_file);
   const meetingCount = Object.keys(meetings).length;
   logger.info(`Found ${meetingCount} meetings in local cache`);
 

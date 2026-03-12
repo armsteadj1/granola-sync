@@ -111,8 +111,9 @@ async function runInteractiveSetup() {
     }
     console.log(chalk_1.default.green('✓') + ' Granola detected');
     // Check local cache
-    if (fs.existsSync(paths_1.GRANOLA_CACHE_PATH)) {
-        const meetings = (0, cache_1.getMeetingsFromCache)();
+    const cachePath = (0, paths_1.getGranolaCachePath)(existingConfig.cache_file);
+    if (fs.existsSync(cachePath)) {
+        const meetings = (0, cache_1.getMeetingsFromCache)(existingConfig.cache_file);
         const meetingCount = Object.keys(meetings).length;
         const withContent = Object.values(meetings).filter((m) => (m.transcribe || m.notes_markdown) && !m.deleted_at).length;
         console.log(chalk_1.default.green('✓') + ` Local cache: ${meetingCount} meetings (${withContent} with content)`);
@@ -246,8 +247,9 @@ function registerSetup(program) {
             }
             console.log('Granola: OK');
             // Check local cache
-            if (fs.existsSync(paths_1.GRANOLA_CACHE_PATH)) {
-                const meetings = (0, cache_1.getMeetingsFromCache)();
+            const setupCachePath = (0, paths_1.getGranolaCachePath)(config.cache_file);
+            if (fs.existsSync(setupCachePath)) {
+                const meetings = (0, cache_1.getMeetingsFromCache)(config.cache_file);
                 const meetingCount = Object.keys(meetings).length;
                 const withContent = Object.values(meetings).filter((m) => (m.transcribe || m.notes_markdown) && !m.deleted_at).length;
                 console.log(`Local cache: ${meetingCount} meetings (${withContent} with content)`);
@@ -296,7 +298,8 @@ function registerStatus(program) {
         const state = (0, config_1.loadSyncState)();
         const uploaded = state.uploaded_meetings;
         const lastSyncStr = state.last_sync;
-        const meetings = (0, cache_1.getMeetingsFromCache)();
+        const statusConfig = (0, config_1.loadConfig)();
+        const meetings = (0, cache_1.getMeetingsFromCache)(statusConfig.cache_file);
         // Categorize meetings
         const inProgressMeetings = [];
         const deletedMeetings = [];
@@ -520,6 +523,7 @@ function registerConfig(program) {
         .command('config')
         .description('View or update configuration settings')
         .option('--output-dir <path>', 'Set the output directory for synced files')
+        .option('--cache-file <filename>', 'Set the Granola cache filename (e.g. cache-v6.json)')
         .option('--show', 'Print current configuration')
         .action((opts) => {
         const config = (0, config_1.loadConfig)();
@@ -534,7 +538,13 @@ function registerConfig(program) {
             (0, config_1.saveConfig)(config);
             console.log(`Output directory set to: ${config.output_dir}`);
         }
-        if (opts.show || !opts.outputDir) {
+        if (opts.cacheFile) {
+            config.cache_file = opts.cacheFile;
+            (0, config_1.saveConfig)(config);
+            const resolvedPath = (0, paths_1.getGranolaCachePath)(opts.cacheFile);
+            console.log(`Cache file set to: ${opts.cacheFile} (${resolvedPath})`);
+        }
+        if (opts.show || (!opts.outputDir && !opts.cacheFile)) {
             if (Object.keys(config).length > 0) {
                 console.log(`Config file: ${paths_1.CONFIG_PATH}`);
                 process.stdout.write(yaml.dump(config, { noCompatMode: true }));
@@ -772,18 +782,20 @@ function registerDoctor(program) {
             path: paths_1.GRANOLA_AUTH_PATH,
         };
         // Granola cache
-        if (fs.existsSync(paths_1.GRANOLA_CACHE_PATH)) {
-            const meetings = (0, cache_1.getMeetingsFromCache)();
+        const doctorConfig = (0, config_1.loadConfig)();
+        const doctorCachePath = (0, paths_1.getGranolaCachePath)(doctorConfig.cache_file);
+        if (fs.existsSync(doctorCachePath)) {
+            const meetings = (0, cache_1.getMeetingsFromCache)(doctorConfig.cache_file);
             checks['granola_cache'] = {
                 ok: true,
-                path: paths_1.GRANOLA_CACHE_PATH,
+                path: doctorCachePath,
                 meetings: Object.keys(meetings).length,
             };
         }
         else {
             checks['granola_cache'] = {
                 ok: false,
-                path: paths_1.GRANOLA_CACHE_PATH,
+                path: doctorCachePath,
                 meetings: 0,
             };
         }

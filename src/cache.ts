@@ -1,18 +1,22 @@
 import * as fs from 'fs';
 import { Meeting } from './types';
-import { GRANOLA_CACHE_PATH } from './paths';
+import { getGranolaCachePath } from './paths';
 import { logger } from './logger';
 
-export function getMeetingsFromCache(): Record<string, Meeting> {
-  if (!fs.existsSync(GRANOLA_CACHE_PATH)) {
+export function getMeetingsFromCache(cacheFile?: string): Record<string, Meeting> {
+  const cachePath = getGranolaCachePath(cacheFile);
+
+  if (!fs.existsSync(cachePath)) {
     return {};
   }
 
   try {
-    const raw = fs.readFileSync(GRANOLA_CACHE_PATH, 'utf-8');
-    const data = JSON.parse(raw) as { cache?: string };
-    const cacheStr = data.cache || '{}';
-    const cache = JSON.parse(cacheStr) as { state?: { documents?: Record<string, Meeting> } };
+    const raw = fs.readFileSync(cachePath, 'utf-8');
+    const data = JSON.parse(raw) as { cache?: string | Record<string, unknown> };
+    // cache-v3 stores cache as a JSON string; cache-v6+ stores it as an object
+    const cache = (typeof data.cache === 'string'
+      ? JSON.parse(data.cache)
+      : (data.cache || {})) as { state?: { documents?: Record<string, Meeting> } };
     const state = cache.state || {};
     return state.documents || {};
   } catch (err) {
