@@ -45,8 +45,10 @@ function getMeetingsFromCache(cacheFile) {
     try {
         const raw = fs.readFileSync(cachePath, 'utf-8');
         const data = JSON.parse(raw);
-        const cacheStr = data.cache || '{}';
-        const cache = JSON.parse(cacheStr);
+        // cache-v3 stores cache as a JSON string; cache-v6+ stores it as an object
+        const cache = (typeof data.cache === 'string'
+            ? JSON.parse(data.cache)
+            : (data.cache || {}));
         const state = cache.state || {};
         return state.documents || {};
     }
