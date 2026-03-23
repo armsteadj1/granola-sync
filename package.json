@@ -1,6 +1,6 @@
 {
   "name": "@armsteadj1/granola-sync",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "Sync Granola meeting transcripts to a configured folder",
   "main": "dist/index.js",
   "bin": {
@@ -36,7 +36,14 @@
     "@types/prompts": "^2.4.9",
     "typescript": "^5.3.2"
   },
-  "keywords": ["granola", "google-drive", "sync", "transcripts", "meetings", "cli"],
+  "keywords": [
+    "granola",
+    "google-drive",
+    "sync",
+    "transcripts",
+    "meetings",
+    "cli"
+  ],
   "license": "MIT",
   "files": [
     "dist",
