@@ -33,12 +33,50 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.DAEMON_LAUNCHER = exports.DAEMON_SUPPORT_DIR = exports.LAUNCHAGENT_PLIST = exports.LAUNCHAGENT_LABEL = exports.WORKOS_CLIENT_ID = exports.WORKOS_AUTH_URL = exports.GRANOLA_API_BASE = exports.DRIVE_FOLDER_NAME = exports.GOOGLE_DRIVE_BASE = exports.LOG_PATH = exports.CONFIG_PATH_LEGACY = exports.CONFIG_PATH = exports.SYNC_STATE_PATH = exports.CONFIG_DIR = exports.GRANOLA_CACHE_PATH = exports.GRANOLA_AUTH_PATH = exports.HOME = void 0;
+exports.DAEMON_LAUNCHER = exports.DAEMON_SUPPORT_DIR = exports.LAUNCHAGENT_PLIST = exports.LAUNCHAGENT_LABEL = exports.WORKOS_CLIENT_ID = exports.WORKOS_AUTH_URL = exports.GRANOLA_API_BASE = exports.DRIVE_FOLDER_NAME = exports.GOOGLE_DRIVE_BASE = exports.LOG_PATH = exports.CONFIG_PATH_LEGACY = exports.CONFIG_PATH = exports.SYNC_STATE_PATH = exports.CONFIG_DIR = exports.GRANOLA_CACHE_PATH = exports.DEFAULT_CACHE_FILENAME = exports.GRANOLA_APP_DIR = exports.GRANOLA_AUTH_PATH = exports.HOME = void 0;
+exports.getGranolaCachePath = getGranolaCachePath;
+const fs = __importStar(require("fs"));
 const os = __importStar(require("os"));
 const path = __importStar(require("path"));
 exports.HOME = os.homedir();
 exports.GRANOLA_AUTH_PATH = path.join(exports.HOME, 'Library', 'Application Support', 'Granola', 'supabase.json');
-exports.GRANOLA_CACHE_PATH = path.join(exports.HOME, 'Library', 'Application Support', 'Granola', 'cache-v3.json');
+exports.GRANOLA_APP_DIR = path.join(exports.HOME, 'Library', 'Application Support', 'Granola');
+exports.DEFAULT_CACHE_FILENAME = 'cache-v6.json';
+/** @deprecated Use getGranolaCachePath() instead */
+exports.GRANOLA_CACHE_PATH = path.join(exports.GRANOLA_APP_DIR, exports.DEFAULT_CACHE_FILENAME);
+/**
+ * Resolve the Granola cache path. Priority:
+ * 1. Explicit cache_file from config (if provided)
+ * 2. Auto-detect highest cache-vN.json in the Granola app dir
+ * 3. Fall back to DEFAULT_CACHE_FILENAME
+ */
+function getGranolaCachePath(configCacheFile) {
+    if (configCacheFile) {
+        // If it's an absolute path, use as-is; otherwise treat as a filename in the app dir
+        if (path.isAbsolute(configCacheFile)) {
+            return configCacheFile;
+        }
+        return path.join(exports.GRANOLA_APP_DIR, configCacheFile);
+    }
+    // Auto-detect: find the highest cache-vN.json
+    try {
+        const files = fs.readdirSync(exports.GRANOLA_APP_DIR);
+        const cacheFiles = files
+            .filter((f) => /^cache-v\d+\.json$/.test(f))
+            .sort((a, b) => {
+            const vA = parseInt(a.match(/cache-v(\d+)\.json/)[1], 10);
+            const vB = parseInt(b.match(/cache-v(\d+)\.json/)[1], 10);
+            return vB - vA; // highest first
+        });
+        if (cacheFiles.length > 0) {
+            return path.join(exports.GRANOLA_APP_DIR, cacheFiles[0]);
+        }
+    }
+    catch {
+        // App dir doesn't exist or isn't readable
+    }
+    return path.join(exports.GRANOLA_APP_DIR, exports.DEFAULT_CACHE_FILENAME);
+}
 exports.CONFIG_DIR = path.join(exports.HOME, '.config', 'granola-sync');
 exports.SYNC_STATE_PATH = path.join(exports.CONFIG_DIR, 'sync_state.json');
 exports.CONFIG_PATH = path.join(exports.CONFIG_DIR, 'config.yaml');

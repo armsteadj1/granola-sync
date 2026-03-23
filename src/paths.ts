@@ -1,9 +1,49 @@
+import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
 export const HOME = os.homedir();
 export const GRANOLA_AUTH_PATH = path.join(HOME, 'Library', 'Application Support', 'Granola', 'supabase.json');
-export const GRANOLA_CACHE_PATH = path.join(HOME, 'Library', 'Application Support', 'Granola', 'cache-v3.json');
+export const GRANOLA_APP_DIR = path.join(HOME, 'Library', 'Application Support', 'Granola');
+export const DEFAULT_CACHE_FILENAME = 'cache-v6.json';
+
+/** @deprecated Use getGranolaCachePath() instead */
+export const GRANOLA_CACHE_PATH = path.join(GRANOLA_APP_DIR, DEFAULT_CACHE_FILENAME);
+
+/**
+ * Resolve the Granola cache path. Priority:
+ * 1. Explicit cache_file from config (if provided)
+ * 2. Auto-detect highest cache-vN.json in the Granola app dir
+ * 3. Fall back to DEFAULT_CACHE_FILENAME
+ */
+export function getGranolaCachePath(configCacheFile?: string): string {
+  if (configCacheFile) {
+    // If it's an absolute path, use as-is; otherwise treat as a filename in the app dir
+    if (path.isAbsolute(configCacheFile)) {
+      return configCacheFile;
+    }
+    return path.join(GRANOLA_APP_DIR, configCacheFile);
+  }
+
+  // Auto-detect: find the highest cache-vN.json
+  try {
+    const files = fs.readdirSync(GRANOLA_APP_DIR);
+    const cacheFiles = files
+      .filter((f) => /^cache-v\d+\.json$/.test(f))
+      .sort((a, b) => {
+        const vA = parseInt(a.match(/cache-v(\d+)\.json/)![1], 10);
+        const vB = parseInt(b.match(/cache-v(\d+)\.json/)![1], 10);
+        return vB - vA; // highest first
+      });
+    if (cacheFiles.length > 0) {
+      return path.join(GRANOLA_APP_DIR, cacheFiles[0]);
+    }
+  } catch {
+    // App dir doesn't exist or isn't readable
+  }
+
+  return path.join(GRANOLA_APP_DIR, DEFAULT_CACHE_FILENAME);
+}
 export const CONFIG_DIR = path.join(HOME, '.config', 'granola-sync');
 export const SYNC_STATE_PATH = path.join(CONFIG_DIR, 'sync_state.json');
 export const CONFIG_PATH = path.join(CONFIG_DIR, 'config.yaml');
