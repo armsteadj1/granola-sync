@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.granolaRequest = granolaRequest;
+exports.listDocuments = listDocuments;
 exports.getTranscript = getTranscript;
 const axios_1 = __importDefault(require("axios"));
 const paths_1 = require("./paths");
@@ -21,6 +22,19 @@ async function granolaRequest(endpoint, data = {}) {
         },
     });
     return response.data;
+}
+async function listDocuments(limit = 2000) {
+    try {
+        const data = await granolaRequest('/v1/get-documents', { limit });
+        if (Array.isArray(data)) {
+            return data;
+        }
+        return [];
+    }
+    catch (err) {
+        logger_1.logger.warning(`Failed to list documents from API: ${err}`);
+        return [];
+    }
 }
 async function getTranscript(documentId) {
     try {

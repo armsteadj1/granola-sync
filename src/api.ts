@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Utterance } from './types';
+import { Meeting, Utterance } from './types';
 import { GRANOLA_API_BASE } from './paths';
 import { getGranolaToken } from './auth';
 import { logger } from './logger';
@@ -19,6 +19,19 @@ export async function granolaRequest(
     },
   });
   return response.data;
+}
+
+export async function listDocuments(limit = 2000): Promise<Meeting[]> {
+  try {
+    const data = await granolaRequest('/v1/get-documents', { limit });
+    if (Array.isArray(data)) {
+      return data as Meeting[];
+    }
+    return [];
+  } catch (err) {
+    logger.warning(`Failed to list documents from API: ${err}`);
+    return [];
+  }
 }
 
 export async function getTranscript(documentId: string): Promise<Utterance[]> {

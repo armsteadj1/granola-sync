@@ -10,7 +10,7 @@ import {
 import { logger } from './logger';
 import { ensureConfigDir, loadConfig, loadSyncState, saveSyncState } from './config';
 import { getMeetingsFromCache } from './cache';
-import { getTranscript } from './api';
+import { getTranscript, listDocuments } from './api';
 import { createMeetingMarkdown } from './markdown';
 
 export function validateWritable(dirPath: string): { ok: boolean; error: string } {
@@ -107,14 +107,22 @@ export async function syncMeetings(outputDir?: string): Promise<void> {
     return;
   }
 
-  // Load meetings from local cache
-  const config = loadConfig();
-  const meetings = getMeetingsFromCache(config.cache_file);
-  const meetingCount = Object.keys(meetings).length;
-  logger.info(`Found ${meetingCount} meetings in local cache`);
+  // Load meetings from API first, fall back to local cache
+  let meetings: Meeting[];
+  const apiMeetings = await listDocuments();
+  if (apiMeetings.length > 0) {
+    meetings = apiMeetings;
+    logger.info(`Found ${meetings.length} meetings from API`);
+  } else {
+    logger.info('API unavailable, falling back to local cache');
+    const config = loadConfig();
+    const cacheMeetings = getMeetingsFromCache(config.cache_file);
+    meetings = Object.values(cacheMeetings);
+    logger.info(`Found ${meetings.length} meetings in local cache`);
+  }
 
-  if (meetingCount === 0) {
-    logger.warning('No meetings found in local cache. Is Granola running?');
+  if (meetings.length === 0) {
+    logger.warning('No meetings found. Is Granola running?');
     return;
   }
 
@@ -123,13 +131,14 @@ export async function syncMeetings(outputDir?: string): Promise<void> {
   let alreadySyncedStreak = 0;
 
   // Sort meetings by created_at descending (newest first)
-  const sortedMeetings = Object.entries(meetings).sort(([, a], [, b]) => {
+  const sortedMeetings = meetings.sort((a, b) => {
     const aDate = a.created_at || '';
     const bDate = b.created_at || '';
     return bDate.localeCompare(aDate);
   });
 
-  for (const [docId, meeting] of sortedMeetings) {
+  for (const meeting of sortedMeetings) {
+    const docId = meeting.id;
     // Skip deleted or invalid meetings
     if (meeting.deleted_at || meeting.was_trashed) continue;
 
@@ -137,6 +146,9 @@ export async function syncMeetings(outputDir?: string): Promise<void> {
     if ((meeting.meeting_end_count || 0) === 0) {
       const title = meeting.title || 'Untitled';
       logger.info(`Skipping in-progress meeting: ${title}`);
+      // Reset streak — in-progress meetings may become syncable later,
+      // so we can't assume everything beyond them is already synced
+      alreadySyncedStreak = 0;
       continue;
     }
 
@@ -144,9 +156,9 @@ export async function syncMeetings(outputDir?: string): Promise<void> {
 
     if (meetingHash in uploaded) {
       alreadySyncedStreak++;
-      // Stop after hitting 10 consecutive already-synced meetings
-      if (alreadySyncedStreak >= 10) {
-        logger.info('Hit 10 consecutive already-synced meetings, stopping early.');
+      // Stop after hitting 20 consecutive already-synced meetings
+      if (alreadySyncedStreak >= 20) {
+        logger.info('Hit 20 consecutive already-synced meetings, stopping early.');
         break;
       }
       continue;
@@ -199,6 +211,16 @@ export async function syncMeetings(outputDir?: string): Promise<void> {
     try {
       const outputPath = path.join(outputFolder, filename);
       fs.writeFileSync(outputPath, content);
+
+      // Set file modification time to meeting date so files sort by date in Finder
+      if (createdAt) {
+        try {
+          const meetingDate = new Date(createdAt);
+          fs.utimesSync(outputPath, meetingDate, meetingDate);
+        } catch {
+          // Ignore — filesystem date is cosmetic
+        }
+      }
 
       uploaded[meetingHash] = {
         filename,

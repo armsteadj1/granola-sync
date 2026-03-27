@@ -562,6 +562,9 @@ function buildLauncherScript() {
 # Granola Sync Launcher
 # Loads node version managers so the daemon works regardless of node version or upgrades.
 
+# Homebrew (Apple Silicon + Intel)
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+
 # nvm
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh"
