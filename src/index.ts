@@ -9,7 +9,7 @@ import {
 } from './cli';
 import { checkForUpdates } from './version-check';
 
-const VERSION = '0.2.8';
+const VERSION = '0.3.0';
 const program = new Command();
 
 program
